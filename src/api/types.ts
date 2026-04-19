@@ -1,0 +1,74 @@
+export interface PaginatedResponse<T> {
+  paging: {
+    count: number;
+    limit: number;
+    offset: number;
+    next: string | null;
+  };
+  content: T[];
+}
+
+export interface YGProject {
+  id: string;
+  title: string;
+  users: Record<string, string>;
+}
+
+export interface YGBoard {
+  id: string;
+  title: string;
+  projectId: string;
+  stickers?: Record<string, unknown>;
+}
+
+export interface YGColumn {
+  id: string;
+  title: string;
+  boardId: string;
+  color?: string;
+}
+
+export interface YGDeadline {
+  timestamp: number;
+  startDate?: number;
+  withTime?: boolean;
+}
+
+export interface YGTask {
+  id: string;
+  title: string;
+  columnId: string;
+  description?: string;
+  assigned?: string[];
+  deadline?: YGDeadline | null;
+  archived?: boolean;
+  completed?: boolean;
+  stickers?: Record<string, unknown>;
+  customFields?: Record<string, unknown>;
+  timeTracking?: unknown;
+  createdBy?: string;
+  createdAt?: string;
+  subtasks?: number;
+}
+
+export interface YGUser {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  isAdmin?: boolean;
+}
+
+export interface YGSticker {
+  id: string;
+  name: string;
+  states?: Array<{ name: string; color: string }>;
+}
+
+export interface YGChatMessage {
+  id: string;
+  text: string;
+  createdBy: string;
+  createdAt: string;
+  label?: string;
+}

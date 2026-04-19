@@ -1,0 +1,16 @@
+name = "yougile-mcp"
+main = "src/worker.ts"
+compatibility_date = "2026-04-15"
+compatibility_flags = ["nodejs_compat"]
+
+# Secrets (set via `wrangler secret put <NAME>`):
+#   YOUGILE_API_KEY  — your YouGile API key from POST /auth/keys
+#   MCP_AUTH_TOKEN   — any random string; used as the Bearer token that
+#                      Claude's custom connector will send in Authorization.
+#
+# Routes / custom domain (optional): uncomment and configure if you want a
+# custom hostname instead of the default <name>.<your-subdomain>.workers.dev
+#
+# [[routes]]
+# pattern = "yougile-mcp.example.com/*"
+# zone_name = "example.com"
