@@ -92,7 +92,7 @@ export interface YGSprintSticker {
 export interface YGChatMessage {
   id: string;
   text: string;
-  createdBy: string;
-  createdAt: string;
+  fromUserId?: string;
+  timestamp?: number;
   label?: string;
 }
