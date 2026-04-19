@@ -59,10 +59,34 @@ export interface YGUser {
   isAdmin?: boolean;
 }
 
+export interface YGStickerState {
+  id: string;
+  name: string;
+  color?: string;
+  deleted?: boolean;
+}
+
 export interface YGSticker {
   id: string;
   name: string;
-  states?: Array<{ name: string; color: string }>;
+  icon?: string;
+  deleted?: boolean;
+  states?: YGStickerState[];
+}
+
+export interface YGSprintStickerState {
+  id: string;
+  name: string;
+  begin?: number; // unix seconds
+  end?: number;
+  deleted?: boolean;
+}
+
+export interface YGSprintSticker {
+  id: string;
+  name: string;
+  deleted?: boolean;
+  states?: YGSprintStickerState[];
 }
 
 export interface YGChatMessage {

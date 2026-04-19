@@ -16,12 +16,15 @@ AI-агенту, поддерживающему MCP, читать и измен�
 
 ## Возможности
 
-18 инструментов в 6 категориях:
+28 инструментов в 6 категориях:
 
 - **Навигация** — `list_projects`, `list_boards`, `list_columns`, `list_users`
 - **CRUD задач** — `list_tasks`, `get_task`, `create_task`, `update_task`,
   `delete_task`, `move_task`, `complete_task`
-- **Теги (стикеры)** — `list_stickers`, `set_task_stickers`
+- **Теги (стикеры)** — `list_stickers`, `get_sticker`, `list_sprint_stickers`,
+  `create_sticker`, `update_sticker`, `delete_sticker`,
+  `add_sticker_state`, `update_sticker_state`, `delete_sticker_state`,
+  `set_task_stickers`, `add_task_sticker`, `remove_task_sticker`
 - **Комментарии** — `add_task_comment`, `get_task_comments`
 - **Аналитика** — `board_summary`, `my_tasks`, `overdue_tasks`
 

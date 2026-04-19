@@ -78,15 +78,43 @@ matters; `false` means it's a whole-day deadline. `startDate` is optional.
 YouGile stickers are typed labels. Each sticker has a name (e.g. "Priority")
 and a list of states (e.g. ["High", "Medium", "Low"]). On a task, stickers are
 stored as `{stickerId: stateId}` — the value is the state ID, not the state
-name.
+name. Special task values: `"empty"` (sticker attached without a state),
+`"-"` (detach the sticker).
+
+#### Sticker reads
 
 | Tool | Required input | Notes |
 |------|----------------|-------|
-| `list_stickers` | — | Returns `[{id, name, states: [stateName]}]` — but state IDs are NOT exposed here. To get state IDs, call YouGile API directly or inspect a task's `stickers` field |
-| `set_task_stickers` | `taskId`, `stickers` (object) | Replaces the stickers map. Format: `{"stickerId": "stateId"}`, or `{"stickerId": true}` for boolean stickers |
+| `list_stickers` | — | Returns string stickers including states with full `{id, name, color}` |
+| `get_sticker` | `id` | Single sticker with all states |
+| `list_sprint_stickers` | — | Sprint stickers (states have `begin`/`end` unix seconds) |
 
-**Discovering state IDs (workaround):** in YouGile UI, set a state on a task,
-then call `get_task` and inspect the `stickers` field — it shows real IDs.
+#### Sticker CRUD
+
+| Tool | Required input | Notes |
+|------|----------------|-------|
+| `create_sticker` | `name` | Optional `icon`, `states: [{name, color?}]` for initial values |
+| `update_sticker` | `id` + any of `name`, `icon` | Only sticker-level fields. To change states use the state tools below |
+| `delete_sticker` | `id` | Soft-delete (`deleted: true`) |
+
+#### State CRUD (values inside a sticker)
+
+| Tool | Required input | Notes |
+|------|----------------|-------|
+| `add_sticker_state` | `stickerId`, `name` | Optional `color` |
+| `update_sticker_state` | `stickerId`, `stateId` + any of `name`, `color`, `deleted` | |
+| `delete_sticker_state` | `stickerId`, `stateId` | Soft-delete a single state |
+
+#### Applying stickers to tasks
+
+| Tool | Required input | Notes |
+|------|----------------|-------|
+| `set_task_stickers` | `taskId`, `stickers` (full map) | **REPLACES** all stickers on the task. Use only when you intentionally want to overwrite everything |
+| `add_task_sticker` | `taskId`, `stickerId`, `stateId` | Sets one sticker, preserves the rest. Internally reads → merges → writes |
+| `remove_task_sticker` | `taskId`, `stickerId` | Sends `"-"` for that sticker, other stickers untouched |
+
+For routine task tagging, prefer `add_task_sticker` / `remove_task_sticker`.
+`set_task_stickers` is the low-level escape hatch.
 
 ### Comments (chat)
 
@@ -110,10 +138,9 @@ then call `get_task` and inspect the `stickers` field — it shows real IDs.
 1. `list_projects` → find project ID
 2. `list_boards` (with `projectId`) → find board ID
 3. `list_columns` (with `boardId`) → find target column ID
-4. `list_stickers` → find Priority sticker ID
-5. (One-off) get state IDs: create or open a task in YouGile UI with the
-   priority set, then `get_task` and inspect `stickers`. Cache state IDs.
-6. `create_task` with `title`, `columnId`, `stickers: {priorityId: highStateId}`
+4. `list_stickers` → find Priority sticker ID **and** its High state ID
+   (both are returned in one call)
+5. `create_task` with `title`, `columnId`, `stickers: {priorityId: highStateId}`
 
 Cache the project/board/column IDs in your context — they don't change.
 
@@ -153,8 +180,9 @@ add_task_comment(taskId=T, text="Done. PR: https://github.com/...")
   need counts.
 - **Listing tasks across a whole project**: same — no `projectId` filter.
   Must walk boards → columns → tasks.
-- **Sticker state names vs IDs**: `list_stickers` shows state names but the
-  API stores state IDs. See "Discovering state IDs" above.
+- **Sticker state IDs**: `list_stickers` and `get_sticker` now include the full
+  state objects with `id`, `name`, `color`. Use the `id` when writing to a
+  task's `stickers` field.
 - **Soft delete**: `delete_task` sets `deleted: true` — the task is hidden
   but can be restored in YouGile UI's "Deleted" view.
 - **Task code vs UUID**: `get_task` accepts both, but `update_task`,
