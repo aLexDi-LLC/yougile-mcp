@@ -1,5 +1,7 @@
 # YouGile MCP Server
 
+**English** | [Русский](./README.ru.md)
+
 Custom Model Context Protocol (MCP) server for [YouGile](https://yougile.com) task management.
 Lets Claude (and any MCP-compatible AI agent) read and modify your YouGile boards: create tasks,
 move them between columns, set tags (stickers), post comments, and pull analytics.

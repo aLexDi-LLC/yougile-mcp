@@ -1,5 +1,7 @@
 # AGENTS.md — Guide for AI agents using the YouGile MCP server
 
+**English** | [Русский](./AGENTS.ru.md)
+
 Read this before using the YouGile MCP. It explains the data model, the 18
 tools, and the recommended call chains for common workflows.
 
