@@ -271,6 +271,81 @@ Key rules:
 6. Sticker states need their ID: call list_stickers first.
 ```
 
+### Microsoft AutoGen (`autogen-ext[mcp]` — native, no bridge needed)
+
+AutoGen has **built-in MCP support**. Works with any model: GPT-4o, Claude, Gemini, local via Ollama.
+
+```bash
+pip install "autogen-ext[mcp]" "autogen-agentchat"
+```
+
+```python
+import asyncio
+from autogen_ext.tools.mcp import StdioServerParams, mcp_server_tools
+from autogen_agentchat.agents import AssistantAgent
+from autogen_ext.models.openai import OpenAIChatCompletionClient  # swap for any model
+
+async def main():
+    # Local stdio server
+    server_params = StdioServerParams(
+        command="node",  # full path on Linux: /home/user/.nvm/versions/node/v20.20.2/bin/node
+        args=["/path/to/yougile-mcp/dist/index.js"],
+        env={"YOUGILE_API_KEY": "your-api-key"}
+    )
+
+    tools = await mcp_server_tools(server_params)  # auto-discovers all 38 tools
+    print(f"Loaded {len(tools)} tools: {[t.name for t in tools]}")
+
+    agent = AssistantAgent(
+        name="yougile_agent",
+        model_client=OpenAIChatCompletionClient(model="gpt-4o"),
+        tools=tools,
+        system_message="""
+        You have YouGile task management tools.
+        Navigation: list_projects → list_boards(projectId) → list_columns(boardId) → list_tasks(columnId=...).
+        Never call list_tasks without columnId or assignedTo filter.
+        For all project tasks: list_tasks_by_project(projectId).
+        For company-wide overdue: company_overdue_tasks() — no parameters.
+        """
+    )
+
+    result = await agent.run(task="Show all projects and their overdue task counts")
+    print(result.messages[-1].content)
+
+asyncio.run(main())
+```
+
+For **remote mode** (Cloudflare Workers):
+```python
+from autogen_ext.tools.mcp import StreamableHttpServerParams, mcp_server_tools
+
+server_params = StreamableHttpServerParams(
+    url="https://yougile-mcp.your-subdomain.workers.dev/YOUR_TOKEN/mcp"
+)
+tools = await mcp_server_tools(server_params)
+```
+
+### LangChain / LangGraph
+
+```bash
+pip install langchain-mcp-adapters
+```
+
+```python
+from langchain_mcp_adapters.client import MultiServerMCPClient
+
+async with MultiServerMCPClient({
+    "yougile": {
+        "command": "node",
+        "args": ["/path/to/yougile-mcp/dist/index.js"],
+        "env": {"YOUGILE_API_KEY": "your-key"},
+        "transport": "stdio"
+    }
+}) as client:
+    tools = client.get_tools()
+    # use with any LangChain agent or LangGraph workflow
+```
+
 ---
 
 ## 7. MCP compatibility
@@ -287,8 +362,8 @@ This server implements the **Model Context Protocol (MCP)** stdio transport. It 
 | **GigaChat** | ⚠️ Via bridge | Requires custom MCP adapter |
 | **Mistral** | ⚠️ Via bridge | Via OpenAI-compatible bridge |
 | **Ollama / LM Studio** | ⚠️ Via bridge | Use [mcp-bridge](https://github.com/bartolli/mcp-bridge) |
-| **LangChain / LangGraph** | ⚠️ Via adapter | `langchain-mcp-adapters` package |
-| **AutoGen** | ⚠️ Via adapter | MCP tool adapter available |
+| **LangChain / LangGraph** | ⚠️ Via adapter | `pip install langchain-mcp-adapters` |
+| **AutoGen** | ✅ Native MCP | `pip install "autogen-ext[mcp]"` — no bridge needed |
 
 **Remote mode** (Cloudflare Workers / HTTP transport) is compatible with any HTTP-capable client without needing a bridge.
 
