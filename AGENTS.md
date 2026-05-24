@@ -38,7 +38,7 @@ Company
 
 ---
 
-## 3. Tool reference — all 38 tools
+## 3. Tool reference — all 39 tools
 
 ### Navigation
 
@@ -293,7 +293,7 @@ async def main():
         env={"YOUGILE_API_KEY": "your-api-key"}
     )
 
-    tools = await mcp_server_tools(server_params)  # auto-discovers all 38 tools
+    tools = await mcp_server_tools(server_params)  # auto-discovers all 39 tools
     print(f"Loaded {len(tools)} tools: {[t.name for t in tools]}")
 
     agent = AssistantAgent(

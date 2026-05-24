@@ -28,7 +28,7 @@
 - Removed `agents` package from dependencies (only needed for Cloudflare Workers deploy,
   was causing `zod@3` vs `zod@4` peer dependency conflict on fresh installs)
 - `YGUser` interface updated to reflect actual API response shape
-- README.md and README.ru.md updated to document all 38 tools
+- README.md and README.ru.md updated to document all 39 tools
 
 ## [1.0.0] — 2026-05-22
 

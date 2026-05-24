@@ -18,7 +18,7 @@ Extended Model Context Protocol (MCP) server for [YouGile](https://yougile.com) 
 | Analytics | `list_tasks_by_project`, `company_overdue_tasks` |
 | Bug fixes | `my_tasks` fixed (was 404), `list_users` names fixed (`realName` field) |
 
-**Total: 38 tools** (original had 28).
+**Total: 39 tools** (original had 28).
 
 ---
 
@@ -260,7 +260,7 @@ src/
     client.ts           YouGile HTTP client + rate limiter
     types.ts            TypeScript interfaces
   tools/
-    index.ts            registers all 38 tools
+    index.ts            registers all 39 tools
     projects.ts         list + create + update + delete
     boards.ts           list + create + update + delete
     columns.ts          list + create + update + delete
