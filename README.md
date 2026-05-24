@@ -108,7 +108,7 @@ source ~/.bashrc        # or: source ~/.zshrc
 nvm install 20
 
 # 2. Clone and build
-git clone https://github.com/YOUR_USERNAME/yougile-mcp
+git clone https://github.com/aLexDi-LLC/yougile-mcp
 cd yougile-mcp
 npm install
 npm run build
@@ -125,7 +125,7 @@ nano .env               # paste YOUGILE_API_KEY
 winget install OpenJS.NodeJS.LTS
 
 # Clone and build
-git clone https://github.com/YOUR_USERNAME/yougile-mcp
+git clone https://github.com/aLexDi-LLC/yougile-mcp
 cd yougile-mcp
 npm install
 npm run build
@@ -168,7 +168,7 @@ Add to your project `.mcp.json` or `~/.claude/settings.json`:
   "mcpServers": {
     "yougile": {
       "command": "node",
-      "args": ["/absolute/path/to/yougile-mcp/dist/index.js"],
+      "args": ["~/yougile-mcp/dist/index.js"],
       "env": {
         "YOUGILE_API_KEY": "your-api-key",
         "YOUGILE_USER_ID": "your-user-id-optional"
@@ -178,8 +178,21 @@ Add to your project `.mcp.json` or `~/.claude/settings.json`:
 }
 ```
 
-> **Linux with nvm:** use the full node path:
-> `"/home/username/.nvm/versions/node/v20.20.2/bin/node"`
+> **Linux with nvm:** use the absolute node path (find it with `which node` after `nvm use 20`):
+> `"/home/YOUR_USER/.nvm/versions/node/v20.20.2/bin/node"`
+>
+> **Full path example (Linux):**
+> ```json
+> {
+>   "mcpServers": {
+>     "yougile": {
+>       "command": "/home/YOUR_USER/.nvm/versions/node/v20.20.2/bin/node",
+>       "args": ["/home/YOUR_USER/yougile-mcp/dist/index.js"],
+>       "env": { "YOUGILE_API_KEY": "your-api-key" }
+>     }
+>   }
+> }
+> ```
 
 **Multiple YouGile organizations** — add one entry per org:
 ```json
@@ -206,7 +219,7 @@ Edit your config file:
   "mcpServers": {
     "yougile": {
       "command": "node",
-      "args": ["/absolute/path/to/yougile-mcp/dist/index.js"],
+      "args": ["C:/Users/YOUR_USER/yougile-mcp/dist/index.js"],
       "env": {
         "YOUGILE_API_KEY": "your-api-key"
       }
@@ -214,6 +227,9 @@ Edit your config file:
   }
 }
 ```
+
+> **Windows path example:** `C:/Users/John/yougile-mcp/dist/index.js`  
+> **macOS path example:** `/Users/john/yougile-mcp/dist/index.js`
 
 ---
 

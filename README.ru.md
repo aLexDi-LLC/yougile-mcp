@@ -108,7 +108,7 @@ source ~/.bashrc        # или: source ~/.zshrc
 nvm install 20
 
 # 2. Клонировать и собрать
-git clone https://github.com/YOUR_USERNAME/yougile-mcp
+git clone https://github.com/aLexDi-LLC/yougile-mcp
 cd yougile-mcp
 npm install
 npm run build
@@ -125,7 +125,7 @@ nano .env               # вставить YOUGILE_API_KEY
 winget install OpenJS.NodeJS.LTS
 
 # Клонировать и собрать
-git clone https://github.com/YOUR_USERNAME/yougile-mcp
+git clone https://github.com/aLexDi-LLC/yougile-mcp
 cd yougile-mcp
 npm install
 npm run build
@@ -168,7 +168,7 @@ curl -X POST https://ru.yougile.com/api-v2/auth/keys/get \
   "mcpServers": {
     "yougile": {
       "command": "node",
-      "args": ["/абсолютный/путь/к/yougile-mcp/dist/index.js"],
+      "args": ["~/yougile-mcp/dist/index.js"],
       "env": {
         "YOUGILE_API_KEY": "ваш-api-ключ",
         "YOUGILE_USER_ID": "ваш-user-id-опционально"
@@ -178,8 +178,21 @@ curl -X POST https://ru.yougile.com/api-v2/auth/keys/get \
 }
 ```
 
-> **Linux с nvm:** укажите полный путь к node:
-> `"/home/username/.nvm/versions/node/v20.20.2/bin/node"`
+> **Linux с nvm:** укажите полный путь к node (узнать: `which node` после `nvm use 20`):
+> `"/home/ВАШ_ПОЛЬЗОВАТЕЛЬ/.nvm/versions/node/v20.20.2/bin/node"`
+>
+> **Полный пример для Linux:**
+> ```json
+> {
+>   "mcpServers": {
+>     "yougile": {
+>       "command": "/home/ВАШ_ПОЛЬЗОВАТЕЛЬ/.nvm/versions/node/v20.20.2/bin/node",
+>       "args": ["/home/ВАШ_ПОЛЬЗОВАТЕЛЬ/yougile-mcp/dist/index.js"],
+>       "env": { "YOUGILE_API_KEY": "ваш-api-ключ" }
+>     }
+>   }
+> }
+> ```
 
 **Несколько организаций YouGile** — добавьте по одной записи на каждую:
 ```json
@@ -206,7 +219,7 @@ curl -X POST https://ru.yougile.com/api-v2/auth/keys/get \
   "mcpServers": {
     "yougile": {
       "command": "node",
-      "args": ["/абсолютный/путь/к/yougile-mcp/dist/index.js"],
+      "args": ["C:/Users/ВАШ_ПОЛЬЗОВАТЕЛЬ/yougile-mcp/dist/index.js"],
       "env": {
         "YOUGILE_API_KEY": "ваш-api-ключ"
       }
@@ -214,6 +227,9 @@ curl -X POST https://ru.yougile.com/api-v2/auth/keys/get \
   }
 }
 ```
+
+> **Пример Windows:** `C:/Users/Ivan/yougile-mcp/dist/index.js`  
+> **Пример macOS:** `/Users/ivan/yougile-mcp/dist/index.js`
 
 ---
 

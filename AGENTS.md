@@ -289,7 +289,7 @@ async def main():
     # Local stdio server
     server_params = StdioServerParams(
         command="node",  # full path on Linux: /home/user/.nvm/versions/node/v20.20.2/bin/node
-        args=["/path/to/yougile-mcp/dist/index.js"],
+        args=["/home/YOUR_USER/yougile-mcp/dist/index.js"],
         env={"YOUGILE_API_KEY": "your-api-key"}
     )
 
@@ -337,7 +337,7 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 async with MultiServerMCPClient({
     "yougile": {
         "command": "node",
-        "args": ["/path/to/yougile-mcp/dist/index.js"],
+        "args": ["~/yougile-mcp/dist/index.js"],
         "env": {"YOUGILE_API_KEY": "your-key"},
         "transport": "stdio"
     }
