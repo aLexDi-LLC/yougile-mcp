@@ -1,11 +1,14 @@
-# AGENTS.md — Guide for AI agents using the YouGile MCP server
+# AGENTS.md — YouGile MCP: Guide for AI Agents
 
 **English** | [Русский](./AGENTS.ru.md)
 
-Read this before using the YouGile MCP. It explains the data model, the 18
-tools, and the recommended call chains for common workflows.
+This file is intended **for AI agents** — it is loaded into context automatically by frameworks like Claude Code. Read it before making any YouGile tool calls.
 
-## Mental model
+> This MCP server works with **any AI that supports the Model Context Protocol**: Claude, GPT-4o, Gemini, Qwen, GigaChat, Mistral, and local models via MCP bridges.
+
+---
+
+## 1. Mental model
 
 YouGile is a hierarchical task tracker:
 
@@ -13,186 +16,289 @@ YouGile is a hierarchical task tracker:
 Company
 └─ Project
    └─ Board
-      └─ Column         ← horizontal swimlanes (Todo, In Progress, Done…)
+      └─ Column        ← swimlanes: Backlog / In Progress / Done / etc.
          └─ Task
-            ├─ Stickers (typed tags with optional state, e.g. Priority=High)
-            ├─ Assigned users (array of user IDs)
-            ├─ Deadline (timestamp + optional time)
-            └─ Chat (threaded comments)
+            ├─ Stickers   — typed tags with named states (e.g. Priority=High)
+            ├─ Assigned   — array of user IDs
+            ├─ Deadline   — timestamp in ms + optional time flag
+            └─ Chat       — threaded comments (chatId == taskId)
 ```
 
-To find anything by name, navigate top-down: project → board → column → task.
-Most filters require an ID, not a name. Always resolve names to IDs first via
-the `list_*` tools.
+**Navigation rule:** everything requires IDs. Always resolve names → IDs top-down:
+`list_projects` → `list_boards` → `list_columns` → then act.
 
-## Auth & limits
+---
 
-- Authentication is handled by the server; you don't see the YouGile API key.
-- Rate limit: 45 requests/min per company. The server enforces this with a
-  sliding window — if you call too fast, requests will queue (not fail).
-- Pagination: list tools auto-paginate. Don't worry about offsets.
-- For `list_tasks` specifically, the underlying API does NOT auto-paginate
-  (it returns a single page of up to 50 by default). Pass `limit: 1000` if
-  you need more, or filter narrowly via `columnId` / `assignedTo`.
+## 2. Auth & rate limits
 
-## Tool reference
+- API key is injected server-side via `YOUGILE_API_KEY` env. You never see it.
+- Rate limit: **45 req/min** per company. The server queues excess requests automatically — you will never get a 429.
+- All `list_*` tools auto-paginate. Never worry about offsets.
+- Exception: `list_tasks` returns one page (default 50). Use `columnId` / `assignedTo` filters or pass `limit: 1000`.
 
-### Navigation (always start here)
+---
 
-| Tool | Required input | Returns |
-|------|----------------|---------|
+## 3. Tool reference — all 38 tools
+
+### Navigation
+
+| Tool | Input | Returns |
+|---|---|---|
 | `list_projects` | — | `[{id, title}]` |
 | `list_boards` | `projectId` | `[{id, title}]` |
 | `list_columns` | `boardId` | `[{id, title, color}]` |
-| `list_users` | — | `[{id, email, name}]` |
+| `list_users` | — | `[{id, email, name, isAdmin, status}]` |
 
 ### Task CRUD
 
-| Tool | Required input | Notes |
-|------|----------------|-------|
-| `list_tasks` | — (filters: `columnId`, `assignedTo`, `title`, `limit`, `offset`) | Returns one page only |
-| `get_task` | `id` | Accepts UUID or task code (e.g. "PRJ-123") |
-| `create_task` | `title`, `columnId` | Optional: `description`, `assigned`, `deadline`, `stickers` |
-| `update_task` | `id` + any of: `title`, `description`, `columnId`, `assigned`, `completed`, `archived`, `deadline`, `stickers` | Pass only fields you want to change |
-| `delete_task` | `id` | Soft delete (sets `deleted: true`, can be restored in YouGile UI) |
-| `move_task` | `id`, `columnId` | Convenience for column-only update |
-| `complete_task` | `id` | Convenience for `completed: true` |
+| Tool | Required | Optional | Notes |
+|---|---|---|---|
+| `list_tasks` | — | `columnId`, `assignedTo`, `title`, `limit`, `offset` | Filter by column OR user |
+| `get_task` | `id` | — | Accepts UUID or task code (e.g. `PRJ-123`) |
+| `create_task` | `title`, `columnId` | `description`, `assigned[]`, `deadline`, `stickers` | Returns `{id}` |
+| `update_task` | `id` | any field | Pass only changed fields |
+| `delete_task` | `id` | — | Soft-delete — restorable in UI |
+| `move_task` | `id`, `columnId` | — | Shortcut for column change |
+| `complete_task` | `id` | — | Sets `completed: true` |
 
-#### Deadline format
-
+**Deadline format:**
 ```json
-{
-  "deadline": {
-    "timestamp": 1735689600000,
-    "startDate": 1735603200000,
-    "withTime": true
-  }
-}
+{ "timestamp": 1735689600000, "startDate": 1735603200000, "withTime": true }
 ```
+`timestamp` — due date in **milliseconds**. `withTime: false` = whole-day deadline.
 
-`timestamp` is the due date in milliseconds. `withTime: true` means time-of-day
-matters; `false` means it's a whole-day deadline. `startDate` is optional.
+### Structure management (create / rename / delete)
 
-### Stickers (tags)
+| Tool | Required | Notes |
+|---|---|---|
+| `create_project` | `title` | Also pass `adminUserId` (or set `YOUGILE_USER_ID` env) — otherwise project is created but **invisible** |
+| `update_project` | `id`, `title` | Rename |
+| `delete_project` | `id` | Archive |
+| `create_board` | `title`, `projectId` | — |
+| `update_board` | `id`, `title` | Rename |
+| `delete_board` | `id` | Archive |
+| `create_column` | `title`, `boardId` | Uses `POST /columns` with `boardId` in body — NOT `POST /boards/{id}/columns` (that returns 404) |
+| `update_column` | `id` | Optional: `title`, `color` |
+| `delete_column` | `id` | Archive |
 
-YouGile stickers are typed labels. Each sticker has a name (e.g. "Priority")
-and a list of states (e.g. ["High", "Medium", "Low"]). On a task, stickers are
-stored as `{stickerId: stateId}` — the value is the state ID, not the state
-name. Special task values: `"empty"` (sticker attached without a state),
-`"-"` (detach the sticker).
+### Stickers (typed tags)
 
-#### Sticker reads
+Stickers = label types (e.g. "Priority") with states (e.g. "High", "Medium", "Low").  
+On a task: `stickers: { stickerId: stateId }`. Special values: `"empty"` = attached without state, `"-"` = detach.
 
-| Tool | Required input | Notes |
-|------|----------------|-------|
-| `list_stickers` | — | Returns string stickers including states with full `{id, name, color}` |
+| Tool | Required | Notes |
+|---|---|---|
+| `list_stickers` | — | Returns all sticker types + their states |
 | `get_sticker` | `id` | Single sticker with all states |
-| `list_sprint_stickers` | — | Sprint stickers (states have `begin`/`end` unix seconds) |
+| `list_sprint_stickers` | — | Time-bounded stickers (states have `begin`/`end`) |
+| `create_sticker` | `name` | Optional: `icon`, `states: [{name, color}]` |
+| `update_sticker` | `id` | Optional: `name`, `icon` |
+| `delete_sticker` | `id` | Soft-delete |
+| `add_sticker_state` | `stickerId`, `name` | Optional: `color` |
+| `update_sticker_state` | `stickerId`, `stateId` | Optional: `name`, `color`, `deleted` |
+| `delete_sticker_state` | `stickerId`, `stateId` | Soft-delete |
+| `set_task_stickers` | `taskId`, `stickers` | **REPLACES ALL** stickers — use carefully |
+| `add_task_sticker` | `taskId`, `stickerId`, `stateId` | Adds one, preserves rest |
+| `remove_task_sticker` | `taskId`, `stickerId` | Removes one, preserves rest |
 
-#### Sticker CRUD
+Prefer `add_task_sticker` / `remove_task_sticker` for routine tagging. `set_task_stickers` is the low-level override.
 
-| Tool | Required input | Notes |
-|------|----------------|-------|
-| `create_sticker` | `name` | Optional `icon`, `states: [{name, color?}]` for initial values |
-| `update_sticker` | `id` + any of `name`, `icon` | Only sticker-level fields. To change states use the state tools below |
-| `delete_sticker` | `id` | Soft-delete (`deleted: true`) |
+### Comments
 
-#### State CRUD (values inside a sticker)
+| Tool | Required | Notes |
+|---|---|---|
+| `add_task_comment` | `taskId`, `text` | Optional `label`. Supports plain text or HTML |
+| `get_task_comments` | `taskId` | Full chat history, auto-paginated |
 
-| Tool | Required input | Notes |
-|------|----------------|-------|
-| `add_sticker_state` | `stickerId`, `name` | Optional `color` |
-| `update_sticker_state` | `stickerId`, `stateId` + any of `name`, `color`, `deleted` | |
-| `delete_sticker_state` | `stickerId`, `stateId` | Soft-delete a single state |
+### Analytics
 
-#### Applying stickers to tasks
+| Tool | Required | What it does | Cost |
+|---|---|---|---|
+| `board_summary` | `boardId` | Per-column task counts, completion %, overdue count, unassigned count | 1 + N calls |
+| `my_tasks` | `userId` (opt) | Tasks for a user grouped: overdue / inProgress / completed / unscheduled | 1 call |
+| `overdue_tasks` | `boardId` | Overdue tasks on a board sorted by `daysOverdue` | 1 + N calls |
+| `list_tasks_by_project` | `projectId` | **All tasks** in a project — traverses boards → columns → tasks. `includeCompleted: false` skips done | Many calls |
+| `company_overdue_tasks` | — | **All overdue tasks company-wide** — traverses all projects | Many calls |
 
-| Tool | Required input | Notes |
-|------|----------------|-------|
-| `set_task_stickers` | `taskId`, `stickers` (full map) | **REPLACES** all stickers on the task. Use only when you intentionally want to overwrite everything |
-| `add_task_sticker` | `taskId`, `stickerId`, `stateId` | Sets one sticker, preserves the rest. Internally reads → merges → writes |
-| `remove_task_sticker` | `taskId`, `stickerId` | Sends `"-"` for that sticker, other stickers untouched |
+⚠️ `list_tasks_by_project` and `company_overdue_tasks` make many API calls. Use sparingly on large workspaces.
 
-For routine task tagging, prefer `add_task_sticker` / `remove_task_sticker`.
-`set_task_stickers` is the low-level escape hatch.
+---
 
-### Comments (chat)
+## 4. Recommended workflows
 
-| Tool | Required input | Notes |
-|------|----------------|-------|
-| `add_task_comment` | `taskId`, `text` | Optional `label` for categorization. Text supports plain text or HTML |
-| `get_task_comments` | `taskId` | Returns full chat history paginated |
-
-### Analytics (multi-call, can be slow on large boards)
-
-| Tool | Required input | What it does |
-|------|----------------|--------------|
-| `board_summary` | `boardId` | Fetches all columns + all tasks per column. Returns `{totalTasks, completedCount, completedRatio, overdueCount, unassignedCount, columns: [{id, title, taskCount}]}`. Cost: 1 + N calls (N = number of columns) |
-| `my_tasks` | `userId` (optional, falls back to `YOUGILE_USER_ID` env) | Returns tasks for a user grouped into `overdue` / `inProgress` / `completed` / `unscheduled`. Cost: 1-N calls |
-| `overdue_tasks` | `boardId` | Same fan-out as `board_summary`, returns only overdue tasks sorted by `daysOverdue` |
-
-## Recommended workflows
-
-### "Create a task in board X, column Y, tagged High priority"
-
-1. `list_projects` → find project ID
-2. `list_boards` (with `projectId`) → find board ID
-3. `list_columns` (with `boardId`) → find target column ID
-4. `list_stickers` → find Priority sticker ID **and** its High state ID
-   (both are returned in one call)
-5. `create_task` with `title`, `columnId`, `stickers: {priorityId: highStateId}`
-
-Cache the project/board/column IDs in your context — they don't change.
-
-### "Show me a board overview"
-
-Single call: `board_summary` with `boardId`.
-
-### "What's on my plate?"
-
-Single call: `my_tasks` with `userId`.
-
-### "Move task to Done and post a completion comment"
-
+### Find a task by name
 ```
-move_task(id=T, columnId=DONE_COLUMN_ID)   # or: complete_task(id=T) if 'completed' state is what you need
-add_task_comment(taskId=T, text="Done. PR: https://github.com/...")
+list_projects → find project
+list_boards(projectId) → find board
+list_columns(boardId) → get column IDs
+list_tasks(columnId=X, title="search term")
 ```
 
-### Autonomous dev-agent loop (the use case this server was built for)
+### Create a task with priority tag
+```
+1. list_projects → projectId
+2. list_boards(projectId) → boardId
+3. list_columns(boardId) → columnId of target column
+4. list_stickers → find Priority sticker id + High state id
+5. create_task(title, columnId, stickers={priorityId: highStateId})
+```
 
-1. `list_tasks(columnId=AGENT_COLUMN_ID)` → fetch queue
-2. Filter to tasks with sticker state `agent-status: queued`
-3. For each task (limit 1-3 per run):
-   a. `set_task_stickers(taskId=T, stickers={agentStatusId: inProgressStateId})`
-   b. `add_task_comment(taskId=T, text="Agent started. Branch: agent/task-{id}")`
-   c. Read `CLAUDE.md` from the repo for rules.
-   d. Implement, test, push, `gh pr create`.
-   e. `add_task_comment(taskId=T, text="PR ready: <url>")`
-   f. `set_task_stickers(taskId=T, stickers={agentStatusId: prReadyStateId})`
-   g. On failure: `set_task_stickers` to `failed` state and `add_task_comment`
-      with the error.
+### Get a project overview
+```
+list_tasks_by_project(projectId, includeCompleted=false)
+```
 
-## Common pitfalls
+### Daily standup report
+```
+my_tasks(userId) → overdue + inProgress sections
+```
 
-- **Listing tasks across a whole board**: there is no `boardId` filter on
-  `list_tasks`. You must iterate columns. Use `board_summary` if you only
-  need counts.
-- **Listing tasks across a whole project**: same — no `projectId` filter.
-  Must walk boards → columns → tasks.
-- **Sticker state IDs**: `list_stickers` and `get_sticker` now include the full
-  state objects with `id`, `name`, `color`. Use the `id` when writing to a
-  task's `stickers` field.
-- **Soft delete**: `delete_task` sets `deleted: true` — the task is hidden
-  but can be restored in YouGile UI's "Deleted" view.
-- **Task code vs UUID**: `get_task` accepts both, but `update_task`,
-  `move_task`, etc. expect the UUID. If you only have a code, call `get_task`
-  first to obtain the UUID.
+### Find all overdue across the company
+```
+company_overdue_tasks()   ← single call, no parameters
+```
 
-## Error handling
+### Complete a task and log it
+```
+complete_task(id)
+add_task_comment(taskId=id, text="Done. Result: ...")
+```
 
-All tools return errors as MCP tool errors with structured messages including
-the failed HTTP method, path, status code, and YouGile's response body. If you
-get a 401, the YouGile API key is wrong/revoked. If you get a 429, the rate
-limiter wasn't enough — wait a minute and retry. If you get a 404 on a task
-ID you just created, the soft-delete may have hit it.
+### Autonomous agent loop (CI/CD integration)
+```
+1. list_tasks(columnId=QUEUE_COLUMN)
+2. Filter tasks with sticker agent-status=queued
+3. For each task (max 3 per run):
+   a. add_task_sticker(taskId, agentStatusId, inProgressStateId)
+   b. add_task_comment(taskId, "Started. Branch: feature/task-{id}")
+   c. ... do work ...
+   d. add_task_comment(taskId, "Done. PR: https://...")
+   e. add_task_sticker(taskId, agentStatusId, doneStateId)
+   f. move_task(taskId, columnId=REVIEW_COLUMN)
+   g. On failure: add_task_sticker → failedStateId + add_task_comment with error
+```
+
+### Set up a new project from scratch
+```
+1. list_users → get your userId
+2. create_project(title="My Project", adminUserId=yourId)
+3. create_board(title="Main Board", projectId=newProjectId)
+4. create_column(title="Backlog", boardId=newBoardId)
+5. create_column(title="In Progress", boardId=newBoardId)
+6. create_column(title="Done", boardId=newBoardId)
+7. create_task(title="First task", columnId=backlogColumnId)
+```
+
+---
+
+## 5. Common pitfalls
+
+| Pitfall | Correct approach |
+|---|---|
+| `list_tasks` without filter returns empty | Always use `columnId` or `assignedTo` |
+| `create_project` without `adminUserId` | Project is invisible — always pass it |
+| `create_column` using `/boards/{id}/columns` URL | Wrong — use `POST /columns` with `boardId` in body |
+| Passing sticker state **name** instead of **ID** | Call `list_stickers` first, use `state.id` |
+| `move_task` vs `complete_task` | `move_task` changes column only; `complete_task` sets the `completed` flag |
+| Task code (PRJ-123) in update_task | Doesn't work — call `get_task("PRJ-123")` first to get the UUID |
+| `company_overdue_tasks` on 100+ task workspace | Slow — many API calls, rate-limited to 45/min |
+
+---
+
+## 6. System prompt snippets for different AI frameworks
+
+Copy the appropriate snippet into your system prompt when integrating this MCP server.
+
+### Claude (Claude Code / Claude Desktop)
+```
+You have access to the YouGile MCP server (tool prefix: mcp__yougile__).
+YouGile hierarchy: Company → Project → Board → Column → Task.
+Always navigate top-down: list_projects → list_boards → list_columns before creating or updating tasks.
+Use list_tasks with columnId or assignedTo filters — never without filters.
+For project-wide task lists use list_tasks_by_project(projectId).
+For company-wide overdue report use company_overdue_tasks().
+When creating a project always pass adminUserId (get it from list_users).
+Cache resolved IDs in context — they don't change during a session.
+```
+
+### OpenAI GPT-4o / GPT-4-turbo (via MCP bridge)
+```
+You have access to YouGile task management tools via MCP.
+Tool naming convention: list_projects, list_boards, list_columns, list_tasks, create_task, update_task, etc.
+IMPORTANT: YouGile requires IDs for all operations. Always call list_projects first, then list_boards, then list_columns to resolve names to IDs before acting.
+To get all tasks in a project use list_tasks_by_project. To find overdue tasks company-wide use company_overdue_tasks.
+Never call list_tasks without a columnId or assignedTo filter.
+```
+
+### Google Gemini (via MCP bridge)
+```
+You are connected to a YouGile project management system through MCP tools.
+The data hierarchy is: Project > Board > Column > Task.
+Always start by calling list_projects to discover available projects, then drill down.
+Use board_summary(boardId) for quick board analytics.
+Use my_tasks(userId) to get a user's task list grouped by urgency.
+Use company_overdue_tasks() (no parameters) to find all overdue tasks across all projects.
+```
+
+### Qwen / Alibaba (via MCP bridge)
+```
+You have YouGile task management tools available.
+Start every session with list_projects to understand the workspace structure.
+Required navigation sequence: list_projects → list_boards(projectId) → list_columns(boardId) → then task operations.
+For task creation: create_task requires title and columnId at minimum.
+For full project task listing: use list_tasks_by_project(projectId, includeCompleted=false) to skip done tasks.
+```
+
+### GigaChat / Sber (via MCP bridge)
+```
+Тебе доступны инструменты управления задачами YouGile через MCP.
+Иерархия данных: Компания → Проект → Доска → Колонка → Задача.
+Перед любым действием с задачей — получи нужные ID: list_projects → list_boards → list_columns.
+Для получения всех задач проекта: list_tasks_by_project(projectId).
+Для отчёта по просроченным по всей компании: company_overdue_tasks() без параметров.
+Для дашборда доски: board_summary(boardId).
+```
+
+### Ollama / Local models (via mcp-bridge or LM Studio)
+```
+You have access to YouGile project management via MCP tools.
+Key rules:
+1. All tools require IDs, not names. Use list_* tools to get IDs first.
+2. Navigation order: list_projects → list_boards → list_columns → list_tasks
+3. list_tasks MUST have columnId or assignedTo filter, otherwise returns empty.
+4. To list all tasks in a project: list_tasks_by_project(projectId)
+5. To find all overdue: company_overdue_tasks() with no parameters
+6. Sticker states need their ID: call list_stickers first.
+```
+
+---
+
+## 7. MCP compatibility
+
+This server implements the **Model Context Protocol (MCP)** stdio transport. It is compatible with any client that supports MCP:
+
+| Client | Support | Notes |
+|---|---|---|
+| **Claude Code** | ✅ Native | Configure in `.mcp.json` |
+| **Claude Desktop** | ✅ Native | Configure in `claude_desktop_config.json` |
+| **OpenAI GPT** | ⚠️ Via bridge | Use [mcp-bridge](https://github.com/bartolli/mcp-bridge) or similar |
+| **Google Gemini** | ⚠️ Via bridge | Google AI Studio MCP support (experimental) |
+| **Qwen** | ⚠️ Via bridge | Works with any OpenAI-compatible MCP bridge |
+| **GigaChat** | ⚠️ Via bridge | Requires custom MCP adapter |
+| **Mistral** | ⚠️ Via bridge | Via OpenAI-compatible bridge |
+| **Ollama / LM Studio** | ⚠️ Via bridge | Use [mcp-bridge](https://github.com/bartolli/mcp-bridge) |
+| **LangChain / LangGraph** | ⚠️ Via adapter | `langchain-mcp-adapters` package |
+| **AutoGen** | ⚠️ Via adapter | MCP tool adapter available |
+
+**Remote mode** (Cloudflare Workers / HTTP transport) is compatible with any HTTP-capable client without needing a bridge.
+
+---
+
+## 8. Error reference
+
+| HTTP status | Meaning | Action |
+|---|---|---|
+| `401` | Invalid or revoked API key | Regenerate key via `Ctrl+~` in YouGile |
+| `404` | Entity not found or endpoint missing | Check if ID is correct; some endpoints don't exist (e.g. `/users/{id}/tasks`) |
+| `429` | Rate limit (shouldn't happen — built-in limiter) | Wait 1 minute |
+| `400` | Bad request body | Check required fields; `create_project` needs `adminUserId` |

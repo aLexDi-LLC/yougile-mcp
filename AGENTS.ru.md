@@ -1,198 +1,317 @@
-# AGENTS.ru.md — Гайд для AI-агентов, использующих YouGile MCP
+# AGENTS.ru.md — YouGile MCP: Гайд для AI-агентов
 
 [English](./AGENTS.md) | **Русский**
 
-Прочитай это перед использованием YouGile MCP. Описана модель данных, все 18
-инструментов и рекомендованные цепочки вызовов для типовых сценариев.
+Этот файл предназначен **для AI-агентов** — он автоматически загружается в контекст фреймворками вроде Claude Code. Прочитай его перед первым вызовом инструментов YouGile.
 
-## Модель данных
+> Этот MCP-сервер работает с **любым AI, поддерживающим Model Context Protocol**: Claude, GPT-4o, Gemini, Qwen, GigaChat, Mistral и локальными моделями через MCP-мосты.
 
-YouGile — иерархический трекер:
+---
+
+## 1. Модель данных
+
+YouGile — иерархический трекер задач:
 
 ```
 Компания (Company)
 └─ Проект (Project)
    └─ Доска (Board)
-      └─ Колонка (Column)        ← вертикальные дорожки (To Do, In Progress, Done…)
+      └─ Колонка (Column)   ← дорожки: Бэклог / В работе / Готово / и т.д.
          └─ Задача (Task)
-            ├─ Стикеры (Stickers)  — типизированные теги, у каждого опциональные состояния (например Priority=High)
-            ├─ Назначенные пользователи (Assigned)  — массив user ID
-            ├─ Дедлайн (Deadline)  — timestamp + опционально время дня
-            └─ Чат задачи (Chat)  — комментарии
+            ├─ Стикеры (Stickers)  — типизированные теги с состояниями (напр. Приоритет=Высокий)
+            ├─ Исполнители (Assigned) — массив user ID
+            ├─ Дедлайн (Deadline)  — timestamp в мс + флаг времени
+            └─ Чат (Chat)          — комментарии (chatId == taskId)
 ```
 
-Чтобы найти что-то по имени, идти нужно сверху вниз: проект → доска → колонка
-→ задача. Большинство фильтров требуют ID, а не имя. Сначала всегда резолви
-имена в ID через `list_*` инструменты.
+**Правило навигации:** все операции требуют ID, а не названия. Всегда резолви названия → ID сверху вниз:
+`list_projects` → `list_boards` → `list_columns` → потом действуй.
 
-## Аутентификация и лимиты
+---
 
-- Аутентификация в YouGile делается на стороне сервера; ты не видишь API-ключ.
-- Rate limit: 45 запросов/мин на компанию. Сервер сам ограничивает скользящим
-  окном — если зовёшь слишком быстро, запросы встанут в очередь, а не упадут.
-- Пагинация: list-инструменты автоматически пагинируются. Не думай об offset.
-- Исключение: `list_tasks` НЕ автопагинируется (возвращает одну страницу до 50
-  по умолчанию). Передавай `limit: 1000` для большего размера или используй
-  узкие фильтры (`columnId` / `assignedTo`).
+## 2. Аутентификация и лимиты
 
-## Справочник инструментов
+- API-ключ инжектируется на стороне сервера через `YOUGILE_API_KEY`. Агент его не видит.
+- Лимит запросов: **45 в минуту** на компанию. Сервер сам ставит запросы в очередь — ошибки 429 не будет.
+- Все `list_*` инструменты автоматически пагинируются. Про offset можно забыть.
+- Исключение: `list_tasks` возвращает одну страницу (по умолчанию 50). Используй `columnId` / `assignedTo` или передай `limit: 1000`.
 
-### Навигация (всегда начинай отсюда)
+---
 
-| Tool | Обязательные параметры | Возвращает |
-|------|------------------------|------------|
+## 3. Справочник инструментов — все 38
+
+### Навигация
+
+| Инструмент | Параметры | Возвращает |
+|---|---|---|
 | `list_projects` | — | `[{id, title}]` |
 | `list_boards` | `projectId` | `[{id, title}]` |
 | `list_columns` | `boardId` | `[{id, title, color}]` |
-| `list_users` | — | `[{id, email, name}]` |
+| `list_users` | — | `[{id, email, name, isAdmin, status}]` |
 
 ### CRUD задач
 
-| Tool | Обязательные параметры | Примечания |
-|------|------------------------|------------|
-| `list_tasks` | — (фильтры: `columnId`, `assignedTo`, `title`, `limit`, `offset`) | Возвращает одну страницу |
-| `get_task` | `id` | Принимает UUID или код задачи (например `"PRJ-123"`) |
-| `create_task` | `title`, `columnId` | Опционально: `description`, `assigned`, `deadline`, `stickers` |
-| `update_task` | `id` + любое из: `title`, `description`, `columnId`, `assigned`, `completed`, `archived`, `deadline`, `stickers` | Передавай только те поля, что хочешь изменить |
-| `delete_task` | `id` | Мягкое удаление (`deleted: true`, восстанавливается из UI YouGile) |
-| `move_task` | `id`, `columnId` | Сокращение для смены только колонки |
-| `complete_task` | `id` | Сокращение для `completed: true` |
+| Инструмент | Обязательные | Опциональные | Примечания |
+|---|---|---|---|
+| `list_tasks` | — | `columnId`, `assignedTo`, `title`, `limit`, `offset` | Всегда фильтруй |
+| `get_task` | `id` | — | UUID или код задачи (напр. `PRJ-123`) |
+| `create_task` | `title`, `columnId` | `description`, `assigned[]`, `deadline`, `stickers` | Возвращает `{id}` |
+| `update_task` | `id` | любое поле | Передавай только изменяемые поля |
+| `delete_task` | `id` | — | Мягкое удаление — восстанавливается в UI |
+| `move_task` | `id`, `columnId` | — | Ярлык для смены колонки |
+| `complete_task` | `id` | — | Ставит `completed: true` |
 
-#### Формат дедлайна
-
+**Формат дедлайна:**
 ```json
-{
-  "deadline": {
-    "timestamp": 1735689600000,
-    "startDate": 1735603200000,
-    "withTime": true
-  }
-}
+{ "timestamp": 1735689600000, "startDate": 1735603200000, "withTime": true }
 ```
+`timestamp` — дата дедлайна в **миллисекундах**. `withTime: false` = дедлайн «весь день».
 
-`timestamp` — дата дедлайна в миллисекундах. `withTime: true` означает что
-важно время дня; `false` — дедлайн «весь день». `startDate` опционально.
+### Управление структурой (создание / переименование / удаление)
 
-### Стикеры (теги)
+| Инструмент | Обязательные | Примечания |
+|---|---|---|
+| `create_project` | `title` | Обязательно передай `adminUserId` (или задай `YOUGILE_USER_ID` env) — иначе проект создастся но будет **невидим** |
+| `update_project` | `id`, `title` | Переименование |
+| `delete_project` | `id` | Архивирование |
+| `create_board` | `title`, `projectId` | — |
+| `update_board` | `id`, `title` | Переименование |
+| `delete_board` | `id` | Архивирование |
+| `create_column` | `title`, `boardId` | Использует `POST /columns` с `boardId` в теле — НЕ `POST /boards/{id}/columns` (возвращает 404) |
+| `update_column` | `id` | Опционально: `title`, `color` |
+| `delete_column` | `id` | Архивирование |
 
-Стикеры в YouGile — типизированные ярлыки. У стикера есть имя (например
-«Приоритет») и список состояний (например `["High", "Medium", "Low"]`). На
-задаче стикеры хранятся как `{stickerId: stateId}` — значение это ID состояния,
-а не его имя. Спецзначения на задаче: `"empty"` (стикер прикреплён без
-состояния), `"-"` (открепить стикер).
+### Стикеры (типизированные теги)
 
-#### Чтение стикеров
+Стикеры = типы ярлыков (напр. «Приоритет») с состояниями (напр. «Высокий», «Средний», «Низкий»).
+На задаче: `stickers: { stickerId: stateId }`. Спецзначения: `"empty"` = без состояния, `"-"` = открепить.
 
-| Tool | Обязательные параметры | Примечания |
-|------|------------------------|------------|
-| `list_stickers` | — | Возвращает строковые стикеры с состояниями: `{id, name, color}` |
+| Инструмент | Обязательные | Примечания |
+|---|---|---|
+| `list_stickers` | — | Все типы стикеров и их состояния |
 | `get_sticker` | `id` | Один стикер со всеми состояниями |
-| `list_sprint_stickers` | — | Спринт-стикеры (у состояний есть `begin`/`end` в unix-секундах) |
+| `list_sprint_stickers` | — | Спринт-стикеры (у состояний есть `begin`/`end`) |
+| `create_sticker` | `name` | Опционально: `icon`, `states: [{name, color}]` |
+| `update_sticker` | `id` | Опционально: `name`, `icon` |
+| `delete_sticker` | `id` | Мягкое удаление |
+| `add_sticker_state` | `stickerId`, `name` | Опционально: `color` |
+| `update_sticker_state` | `stickerId`, `stateId` | Опционально: `name`, `color`, `deleted` |
+| `delete_sticker_state` | `stickerId`, `stateId` | Мягкое удаление |
+| `set_task_stickers` | `taskId`, `stickers` | **ЗАМЕНЯЕТ ВСЕ** стикеры — используй осторожно |
+| `add_task_sticker` | `taskId`, `stickerId`, `stateId` | Добавляет один, остальные сохраняет |
+| `remove_task_sticker` | `taskId`, `stickerId` | Убирает один, остальные сохраняет |
 
-#### CRUD стикеров
+Для рутинного тегирования предпочитай `add_task_sticker` / `remove_task_sticker`. `set_task_stickers` — низкоуровневый override.
 
-| Tool | Обязательные параметры | Примечания |
-|------|------------------------|------------|
-| `create_sticker` | `name` | Опционально `icon`, `states: [{name, color?}]` для начальных значений |
-| `update_sticker` | `id` + `name` или `icon` | Только поля уровня стикера. Состояния меняй через инструменты ниже |
-| `delete_sticker` | `id` | Soft-delete (`deleted: true`) |
+### Комментарии
 
-#### CRUD состояний (значения внутри стикера)
+| Инструмент | Обязательные | Примечания |
+|---|---|---|
+| `add_task_comment` | `taskId`, `text` | Опционально `label`. Поддерживает plain text и HTML |
+| `get_task_comments` | `taskId` | Полная история чата с автопагинацией |
 
-| Tool | Обязательные параметры | Примечания |
-|------|------------------------|------------|
-| `add_sticker_state` | `stickerId`, `name` | Опционально `color` |
-| `update_sticker_state` | `stickerId`, `stateId` + `name` / `color` / `deleted` | |
-| `delete_sticker_state` | `stickerId`, `stateId` | Soft-delete одного состояния |
+### Аналитика
 
-#### Применение стикеров к задачам
+| Инструмент | Параметры | Что делает | Стоимость вызовов |
+|---|---|---|---|
+| `board_summary` | `boardId` | Счётчики задач по колонкам, % выполнения, просроченные, без исполнителя | 1 + N |
+| `my_tasks` | `userId` (опц.) | Задачи пользователя: overdue / inProgress / completed / unscheduled | 1 |
+| `overdue_tasks` | `boardId` | Просроченные задачи на доске, отсортированные по `daysOverdue` | 1 + N |
+| `list_tasks_by_project` | `projectId` | **Все задачи** проекта — обходит доски → колонки → задачи. `includeCompleted: false` пропускает выполненные | Много |
+| `company_overdue_tasks` | — | **Все просроченные** по всей компании — обходит все проекты | Много |
 
-| Tool | Обязательные параметры | Примечания |
-|------|------------------------|------------|
-| `set_task_stickers` | `taskId`, `stickers` (полная карта) | **ЗАМЕНЯЕТ** все стикеры. Используй только когда осознанно хочешь перезаписать всё |
-| `add_task_sticker` | `taskId`, `stickerId`, `stateId` | Ставит один стикер, остальные сохраняет. Внутри: read → merge → write |
-| `remove_task_sticker` | `taskId`, `stickerId` | Шлёт `"-"` для этого стикера, остальные не трогает |
+⚠️ `list_tasks_by_project` и `company_overdue_tasks` делают много API-вызовов. Используй редко на больших воркспейсах.
 
-Для рутинной разметки задач используй `add_task_sticker` /
-`remove_task_sticker`. `set_task_stickers` — низкоуровневый аварийный люк.
+---
 
-### Комментарии (чат задачи)
+## 4. Рекомендуемые сценарии
 
-| Tool | Обязательные параметры | Примечания |
-|------|------------------------|------------|
-| `add_task_comment` | `taskId`, `text` | Опционально `label` для категоризации. Поддерживает plain text или HTML |
-| `get_task_comments` | `taskId` | Возвращает всю историю чата с автопагинацией |
-
-### Аналитика (несколько вызовов, может тормозить на больших досках)
-
-| Tool | Обязательные параметры | Что делает |
-|------|------------------------|------------|
-| `board_summary` | `boardId` | Получает все колонки + все задачи в каждой. Возвращает `{totalTasks, completedCount, completedRatio, overdueCount, unassignedCount, columns: [{id, title, taskCount}]}`. Стоимость: 1 + N вызовов (N = число колонок) |
-| `my_tasks` | `userId` (опционально, fallback на `YOUGILE_USER_ID` из env) | Возвращает задачи юзера, сгруппированные `overdue` / `inProgress` / `completed` / `unscheduled`. Стоимость: 1-N вызовов |
-| `overdue_tasks` | `boardId` | Тот же fan-out что у `board_summary`, возвращает только просроченные, отсортированные по `daysOverdue` |
-
-## Рекомендуемые сценарии
-
-### «Создать задачу в проекте X, колонке Y, с тегом High priority»
-
-1. `list_projects` → найди ID проекта
-2. `list_boards` (с `projectId`) → найди ID доски
-3. `list_columns` (с `boardId`) → найди ID нужной колонки
-4. `list_stickers` → найди ID стикера «Приоритет» **и** ID его состояния
-   `High` (оба возвращаются одним вызовом)
-5. `create_task` с `title`, `columnId`, `stickers: {приоритетId: highStateId}`
-
-Кешируй ID проекта/доски/колонок в контексте — они стабильны.
-
-### «Покажи обзор доски»
-
-Один вызов: `board_summary` с `boardId`.
-
-### «Что у меня на тарелке?»
-
-Один вызов: `my_tasks` с `userId`.
-
-### «Перенеси задачу в Done и оставь комментарий»
-
+### Найти задачу по названию
 ```
-move_task(id=T, columnId=DONE_COLUMN_ID)
-# либо: complete_task(id=T) если важен флаг completed
-add_task_comment(taskId=T, text="Готово. PR: https://github.com/...")
+list_projects → найди проект
+list_boards(projectId) → найди доску
+list_columns(boardId) → получи ID колонок
+list_tasks(columnId=X, title="поисковый запрос")
 ```
 
-### Цикл автономного dev-агента (целевой кейс этого сервера)
+### Создать задачу с тегом приоритета
+```
+1. list_projects → projectId
+2. list_boards(projectId) → boardId
+3. list_columns(boardId) → columnId нужной колонки
+4. list_stickers → найди id стикера «Приоритет» и id состояния «Высокий»
+5. create_task(title, columnId, stickers={prioritetId: highStateId})
+```
 
-1. `list_tasks(columnId=AGENT_COLUMN_ID)` → забрать очередь
-2. Отфильтровать задачи со стикером `agent-status: queued`
-3. Для каждой (не более 1-3 за запуск):
-   а) `set_task_stickers(taskId=T, stickers={agentStatusId: inProgressStateId})`
-   б) `add_task_comment(taskId=T, text="Agent started. Branch: agent/task-{id}")`
-   в) Прочитать `CLAUDE.md` из репо — это правила
-   г) Реализовать, прогнать тесты, запушить, `gh pr create`
-   д) `add_task_comment(taskId=T, text="PR ready: <url>")`
-   е) `set_task_stickers(taskId=T, stickers={agentStatusId: prReadyStateId})`
-   ж) При падении: `set_task_stickers` в `failed` + `add_task_comment` с ошибкой
+### Обзор всех задач проекта
+```
+list_tasks_by_project(projectId, includeCompleted=false)
+```
 
-## Типичные грабли
+### Отчёт для ежедневного стендапа
+```
+my_tasks(userId)  →  секции overdue + inProgress
+```
 
-- **Получить все задачи доски целиком**: фильтра по `boardId` в `list_tasks`
-  нет. Нужно итерировать колонки. Если важны только числа — используй
-  `board_summary`.
-- **Получить все задачи проекта**: то же самое — фильтра по `projectId` нет.
-  Идти доски → колонки → задачи.
-- **ID состояний стикеров**: `list_stickers` и `get_sticker` теперь
-  возвращают полные объекты состояний с `id`, `name`, `color`. Используй
-  `id` при записи в поле `stickers` задачи.
-- **Мягкое удаление**: `delete_task` ставит `deleted: true` — задача скрыта,
-  но восстанавливается из UI YouGile во вкладке «Удалённые».
-- **Код задачи vs UUID**: `get_task` принимает оба, но `update_task`,
-  `move_task` и т.д. ждут UUID. Если есть только код — сначала позови
-  `get_task` чтобы получить UUID.
+### Найти все просроченные по всей компании
+```
+company_overdue_tasks()   ← один вызов, без параметров
+```
 
-## Обработка ошибок
+### Завершить задачу и зафиксировать результат
+```
+complete_task(id)
+add_task_comment(taskId=id, text="Готово. Результат: ...")
+```
 
-Все инструменты возвращают ошибки в виде MCP tool errors с подробным сообщением:
-HTTP-метод, путь, статус-код и тело ответа YouGile. Если 401 — API-ключ YouGile
-неверный или отозван. Если 429 — встроенного rate limiter не хватило, подожди
-минуту. Если 404 на только что созданной задаче — возможно по ней прошёл
-soft-delete.
+### Цикл автономного агента (CI/CD интеграция)
+```
+1. list_tasks(columnId=QUEUE_COLUMN)
+2. Отфильтровать задачи со стикером agent-status=queued
+3. Для каждой (не более 3 за запуск):
+   а) add_task_sticker(taskId, agentStatusId, inProgressStateId)
+   б) add_task_comment(taskId, "Старт. Ветка: feature/task-{id}")
+   в) ... выполнить работу ...
+   г) add_task_comment(taskId, "Готово. PR: https://...")
+   д) add_task_sticker(taskId, agentStatusId, doneStateId)
+   е) move_task(taskId, columnId=REVIEW_COLUMN)
+   ж) При ошибке: add_task_sticker → failedStateId + add_task_comment с ошибкой
+```
+
+### Создать проект с нуля
+```
+1. list_users → получи свой userId
+2. create_project(title="Мой проект", adminUserId=userId)
+3. create_board(title="Основная доска", projectId=newProjectId)
+4. create_column(title="Бэклог", boardId=newBoardId)
+5. create_column(title="В работе", boardId=newBoardId)
+6. create_column(title="Готово", boardId=newBoardId)
+7. create_task(title="Первая задача", columnId=backlogColumnId)
+```
+
+---
+
+## 5. Типичные ошибки
+
+| Ошибка | Правильный подход |
+|---|---|
+| `list_tasks` без фильтра возвращает пусто | Всегда используй `columnId` или `assignedTo` |
+| `create_project` без `adminUserId` | Проект невидим — всегда передавай |
+| `create_column` через URL `/boards/{id}/columns` | Неверно — используй `POST /columns` с `boardId` в теле |
+| Передаёшь **название** состояния стикера вместо **ID** | Сначала вызови `list_stickers`, используй `state.id` |
+| `move_task` vs `complete_task` | `move_task` меняет только колонку; `complete_task` ставит флаг `completed` |
+| Код задачи (PRJ-123) в `update_task` | Не работает — сначала `get_task("PRJ-123")` чтобы получить UUID |
+| `company_overdue_tasks` на 100+ задачах | Медленно — много API-вызовов, ограничены 45/мин |
+
+---
+
+## 6. Подсказки для разных AI-фреймворков
+
+Скопируй нужный фрагмент в системный промпт при интеграции этого MCP-сервера.
+
+### Claude (Claude Code / Claude Desktop)
+```
+У тебя есть доступ к MCP-серверу YouGile (префикс инструментов: mcp__yougile__).
+Иерархия YouGile: Компания → Проект → Доска → Колонка → Задача.
+Всегда навигируй сверху вниз: list_projects → list_boards → list_columns, прежде чем создавать или обновлять задачи.
+Используй list_tasks с фильтрами columnId или assignedTo — никогда без фильтров.
+Для всех задач проекта: list_tasks_by_project(projectId).
+Для отчёта по просроченным по всей компании: company_overdue_tasks().
+При создании проекта всегда передавай adminUserId (получи из list_users).
+Кешируй ID в контексте — они не меняются в рамках сессии.
+```
+
+### OpenAI GPT-4o / GPT-4-turbo (через MCP-мост)
+```
+У тебя есть инструменты управления задачами YouGile через MCP.
+Соглашение по именованию: list_projects, list_boards, list_columns, list_tasks, create_task, update_task и т.д.
+ВАЖНО: YouGile требует ID для всех операций. Сначала вызывай list_projects, потом list_boards, потом list_columns, чтобы резолвить названия в ID, а только потом действуй.
+Для всех задач проекта: list_tasks_by_project. Для просроченных по всей компании: company_overdue_tasks.
+Никогда не вызывай list_tasks без фильтра columnId или assignedTo.
+```
+
+### Google Gemini (через MCP-мост)
+```
+Ты подключён к системе управления задачами YouGile через MCP-инструменты.
+Иерархия данных: Project > Board > Column > Task.
+Всегда начинай с list_projects чтобы узнать структуру воркспейса, затем углубляйся.
+Используй board_summary(boardId) для быстрой аналитики доски.
+Используй my_tasks(userId) для списка задач пользователя, сгруппированных по срочности.
+Используй company_overdue_tasks() (без параметров) для всех просроченных по всем проектам.
+```
+
+### Qwen / Alibaba (через MCP-мост)
+```
+Тебе доступны инструменты управления задачами YouGile.
+Начинай каждую сессию с list_projects чтобы понять структуру воркспейса.
+Обязательная последовательность: list_projects → list_boards(projectId) → list_columns(boardId) → потом операции с задачами.
+Для создания задачи: create_task требует как минимум title и columnId.
+Для списка задач проекта: list_tasks_by_project(projectId, includeCompleted=false) пропускает выполненные.
+```
+
+### GigaChat / Сбер (через MCP-мост)
+```
+Тебе доступны инструменты управления задачами YouGile через MCP.
+Иерархия данных: Компания → Проект → Доска → Колонка → Задача.
+Перед любым действием с задачей получи нужные ID: list_projects → list_boards → list_columns.
+Для всех задач проекта: list_tasks_by_project(projectId).
+Для отчёта по просроченным по всей компании: company_overdue_tasks() без параметров.
+Для дашборда доски: board_summary(boardId).
+```
+
+### Ollama / Локальные модели (через mcp-bridge или LM Studio)
+```
+У тебя есть инструменты управления задачами YouGile через MCP.
+Ключевые правила:
+1. Все инструменты требуют ID, а не названия. Сначала используй list_* для получения ID.
+2. Порядок навигации: list_projects → list_boards → list_columns → list_tasks
+3. list_tasks ОБЯЗАТЕЛЬНО должен иметь фильтр columnId или assignedTo, иначе вернёт пустой результат.
+4. Для всех задач проекта: list_tasks_by_project(projectId)
+5. Для всех просроченных: company_overdue_tasks() без параметров
+6. Для состояний стикеров нужен их ID: сначала вызови list_stickers.
+```
+
+### LangChain / LangGraph (Python)
+```python
+# При использовании через langchain-mcp-adapters
+system_prompt = """
+You have YouGile task management tools available.
+Navigation: list_projects → list_boards(projectId) → list_columns(boardId) → list_tasks(columnId=...)
+Never call list_tasks without columnId or assignedTo filter.
+For project-wide tasks: list_tasks_by_project(projectId).
+For company overdue: company_overdue_tasks() with no arguments.
+All IDs are UUIDs. Task codes (PRJ-123) work only in get_task.
+"""
+```
+
+---
+
+## 7. MCP-совместимость
+
+Этот сервер реализует **Model Context Protocol (MCP)** с транспортом stdio. Совместим с любым клиентом, поддерживающим MCP:
+
+| Клиент | Поддержка | Примечания |
+|---|---|---|
+| **Claude Code** | ✅ Нативная | Конфиг в `.mcp.json` |
+| **Claude Desktop** | ✅ Нативная | Конфиг в `claude_desktop_config.json` |
+| **OpenAI GPT** | ⚠️ Через мост | [mcp-bridge](https://github.com/bartolli/mcp-bridge) или аналоги |
+| **Google Gemini** | ⚠️ Через мост | Google AI Studio MCP (экспериментально) |
+| **Qwen** | ⚠️ Через мост | Любой OpenAI-совместимый MCP-мост |
+| **GigaChat** | ⚠️ Через мост | Требует кастомный MCP-адаптер |
+| **Mistral** | ⚠️ Через мост | Через OpenAI-совместимый мост |
+| **Ollama / LM Studio** | ⚠️ Через мост | [mcp-bridge](https://github.com/bartolli/mcp-bridge) |
+| **LangChain / LangGraph** | ⚠️ Через адаптер | Пакет `langchain-mcp-adapters` |
+| **AutoGen** | ⚠️ Через адаптер | MCP tool adapter |
+
+**Удалённый режим** (Cloudflare Workers / HTTP транспорт) совместим с любым HTTP-клиентом без моста.
+
+---
+
+## 8. Справочник ошибок
+
+| HTTP-статус | Значение | Действие |
+|---|---|---|
+| `401` | Неверный или отозванный API-ключ | Пересоздай ключ через `Ctrl+~` в YouGile |
+| `404` | Сущность не найдена или эндпоинт не существует | Проверь ID; некоторые эндпоинты отсутствуют в API v2 (напр. `/users/{id}/tasks`) |
+| `429` | Лимит запросов (не должно случаться — есть встроенный ограничитель) | Подожди 1 минуту |
+| `400` | Неверное тело запроса | Проверь обязательные поля; `create_project` требует `adminUserId` |

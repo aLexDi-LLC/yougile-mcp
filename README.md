@@ -2,142 +2,295 @@
 
 **English** | [Русский](./README.ru.md)
 
-Custom Model Context Protocol (MCP) server for [YouGile](https://yougile.com) task management.
-Lets Claude (and any MCP-compatible AI agent) read and modify your YouGile boards: create tasks,
-move them between columns, set tags (stickers), post comments, and pull analytics.
+Extended Model Context Protocol (MCP) server for [YouGile](https://yougile.com) — a Russian project management system. Lets Claude and any MCP-compatible AI agent read and modify your YouGile workspace: create tasks, manage boards, set tags, post comments, and pull analytics — all from natural language.
 
-Runs in two modes:
-- **Local (stdio)** — for Claude Desktop / Claude Code on your machine
-- **Remote (Cloudflare Workers)** — single hosted instance shared across all your devices,
-  usable from claude.ai connectors and Claude Code routines
+> **Based on** [ra53n/yougile-mcp](https://github.com/ra53n/yougile-mcp) with significant extensions: 10 new tools, bug fixes, and Linux support.
+
+---
+
+## What's new vs the original
+
+| Category | Added |
+|---|---|
+| Projects | `create_project`, `update_project`, `delete_project` |
+| Boards | `create_board`, `update_board`, `delete_board` |
+| Columns | `create_column`, `update_column`, `delete_column` |
+| Analytics | `list_tasks_by_project`, `company_overdue_tasks` |
+| Bug fixes | `my_tasks` fixed (was 404), `list_users` names fixed (`realName` field) |
+
+**Total: 38 tools** (original had 28).
+
+---
 
 ## Features
 
-28 tools across 6 categories:
+### Navigation
+| Tool | Description |
+|---|---|
+| `list_projects` | List all projects in the company |
+| `list_boards` | List boards in a project |
+| `list_columns` | List columns on a board |
+| `list_users` | List all users (shows realName, email, isAdmin, status) |
 
-- **Navigation** — `list_projects`, `list_boards`, `list_columns`, `list_users`
-- **Task CRUD** — `list_tasks`, `get_task`, `create_task`, `update_task`, `delete_task`,
-  `move_task`, `complete_task`
-- **Tags / Stickers** — `list_stickers`, `get_sticker`, `list_sprint_stickers`,
-  `create_sticker`, `update_sticker`, `delete_sticker`,
-  `add_sticker_state`, `update_sticker_state`, `delete_sticker_state`,
-  `set_task_stickers`, `add_task_sticker`, `remove_task_sticker`
-- **Comments** — `add_task_comment`, `get_task_comments`
-- **Analytics** — `board_summary`, `my_tasks`, `overdue_tasks`
+### Task CRUD
+| Tool | Description |
+|---|---|
+| `list_tasks` | List tasks with filters: columnId, assignedTo, title search |
+| `get_task` | Get task by ID or task code (e.g. PRJ-123) |
+| `create_task` | Create task with title, column, description, assignees, deadline, stickers |
+| `update_task` | Update any task fields |
+| `delete_task` | Soft-delete a task |
+| `move_task` | Move task to another column |
+| `complete_task` | Mark task as completed |
 
-Built-in rate limiting (45 req/min, well under YouGile's 50 req/min cap).
+### Projects / Boards / Columns management
+| Tool | Description |
+|---|---|
+| `create_project` | Create project (requires adminUserId — see API notes) |
+| `update_project` | Rename project |
+| `delete_project` | Archive project |
+| `create_board` | Create board inside a project |
+| `update_board` | Rename board |
+| `delete_board` | Archive board |
+| `create_column` | Create column on a board |
+| `update_column` | Rename or recolor column |
+| `delete_column` | Archive column |
 
-## Architecture
+### Tags (Stickers)
+| Tool | Description |
+|---|---|
+| `list_stickers` | List all sticker definitions on a board |
+| `get_sticker` | Get sticker details and states |
+| `list_sprint_stickers` | List sprint stickers (time-bounded) |
+| `create_sticker` | Create new sticker type |
+| `update_sticker` | Rename sticker |
+| `delete_sticker` | Delete sticker type |
+| `add_sticker_state` | Add state to a sticker |
+| `update_sticker_state` | Rename sticker state |
+| `delete_sticker_state` | Delete sticker state |
+| `set_task_stickers` | Set all stickers on a task at once |
+| `add_task_sticker` | Add one sticker to a task |
+| `remove_task_sticker` | Remove sticker from a task |
 
-```
-┌──────────────┐                 ┌──────────────────┐               ┌──────────────┐
-│  Claude /    │  MCP protocol   │  This server     │  YouGile API  │   YouGile    │
-│  agent       │ ──────────────► │  (stdio or HTTP) │ ────────────► │   cloud      │
-└──────────────┘                 └──────────────────┘               └──────────────┘
-```
+### Comments
+| Tool | Description |
+|---|---|
+| `add_task_comment` | Post a comment in a task's chat |
+| `get_task_comments` | Fetch task comment history |
 
-The server is a thin, typed wrapper around the YouGile REST API v2.
-Each MCP tool corresponds to one or a few YouGile API calls.
-Authentication to YouGile uses a Bearer API key stored in `YOUGILE_API_KEY`.
+### Analytics
+| Tool | Description |
+|---|---|
+| `board_summary` | Task counts, completion ratio, overdue, unassigned per column |
+| `my_tasks` | Tasks assigned to a user grouped by status (overdue / in progress / done) |
+| `overdue_tasks` | Overdue tasks on a specific board |
+| `list_tasks_by_project` | All tasks in a project (traverses boards → columns → tasks) |
+| `company_overdue_tasks` | All overdue tasks across the entire company |
 
-## Quick start — Local (stdio)
+---
+
+## Requirements
+
+- **Node.js** ≥ 18 (tested on v20)
+- **npm** ≥ 9
+- **YouGile API key** (see below)
+
+---
+
+## Installation
+
+### Linux / macOS
 
 ```bash
+# 1. Install Node.js via nvm (no sudo needed)
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+source ~/.bashrc        # or: source ~/.zshrc
+nvm install 20
+
+# 2. Clone and build
+git clone https://github.com/YOUR_USERNAME/yougile-mcp
+cd yougile-mcp
 npm install
 npm run build
+
+# 3. Configure
+cp .env.example .env
+nano .env               # paste YOUGILE_API_KEY
 ```
 
-Add to your Claude Desktop / Code MCP config:
+### Windows
+
+```powershell
+# Install Node.js (skip if already installed)
+winget install OpenJS.NodeJS.LTS
+
+# Clone and build
+git clone https://github.com/YOUR_USERNAME/yougile-mcp
+cd yougile-mcp
+npm install
+npm run build
+
+# Configure
+copy .env.example .env
+notepad .env            # paste YOUGILE_API_KEY
+```
+
+---
+
+## Getting a YouGile API key
+
+**Option A — from the app (fastest):**
+1. Open YouGile in the browser
+2. Press `Ctrl + ~`
+3. Copy the API key shown
+
+**Option B — via API:**
+```bash
+# Step 1: get your companyId
+curl -X POST https://ru.yougile.com/api-v2/auth/companies \
+  -H "Content-Type: application/json" \
+  -d '{"login":"your@email.com","password":"yourpassword"}'
+
+# Step 2: get API key (use companyId from step 1)
+curl -X POST https://ru.yougile.com/api-v2/auth/keys/get \
+  -H "Content-Type: application/json" \
+  -d '{"login":"your@email.com","password":"yourpassword","companyId":"COMPANY_ID"}'
+```
+
+---
+
+## Claude Code setup (local / stdio)
+
+Add to your project `.mcp.json` or `~/.claude/settings.json`:
 
 ```json
 {
   "mcpServers": {
     "yougile": {
       "command": "node",
-      "args": ["/absolute/path/to/dist/index.js"],
+      "args": ["/absolute/path/to/yougile-mcp/dist/index.js"],
       "env": {
-        "YOUGILE_API_KEY": "your-yougile-api-key",
-        "YOUGILE_USER_ID": "optional-your-user-id-for-my_tasks"
+        "YOUGILE_API_KEY": "your-api-key",
+        "YOUGILE_USER_ID": "your-user-id-optional"
       }
     }
   }
 }
 ```
 
-## Quick start — Remote (Cloudflare Workers)
+> **Linux with nvm:** use the full node path:
+> `"/home/username/.nvm/versions/node/v20.20.2/bin/node"`
+
+**Multiple YouGile organizations** — add one entry per org:
+```json
+{
+  "mcpServers": {
+    "yougile-org1": { "command": "node", "args": ["..."], "env": { "YOUGILE_API_KEY": "key1" } },
+    "yougile-org2": { "command": "node", "args": ["..."], "env": { "YOUGILE_API_KEY": "key2" } }
+  }
+}
+```
+
+Verify: run `/mcp` in Claude Code — should show `yougile: connected`.
+
+---
+
+## Claude Desktop setup
+
+Edit your config file:
+- **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "yougile": {
+      "command": "node",
+      "args": ["/absolute/path/to/yougile-mcp/dist/index.js"],
+      "env": {
+        "YOUGILE_API_KEY": "your-api-key"
+      }
+    }
+  }
+}
+```
+
+---
+
+## Remote deployment (Cloudflare Workers)
 
 ```bash
 npm install
 npx wrangler login
-npx wrangler secret put YOUGILE_API_KEY     # paste YouGile API key
-npx wrangler secret put MCP_AUTH_TOKEN      # paste random string (openssl rand -hex 32)
+npx wrangler secret put YOUGILE_API_KEY      # paste your YouGile key
+npx wrangler secret put MCP_AUTH_TOKEN       # openssl rand -hex 32
 npm run deploy
 ```
 
-You'll get a URL like `https://yougile-mcp.<your-subdomain>.workers.dev`.
+Health check: `curl https://yougile-mcp.<subdomain>.workers.dev/health`
 
-Verify: `curl https://yougile-mcp.<...>.workers.dev/health` → `{"status":"ok"}`
-
-### Connecting from claude.ai
-
-`claude.ai` connector UI does not support custom HTTP headers, so the auth token
-goes in the URL pathname:
-
-1. https://claude.ai/settings/connectors → **Add custom connector**
-2. URL: `https://yougile-mcp.<...>.workers.dev/<MCP_AUTH_TOKEN>/mcp`
-3. OAuth fields: leave empty
-4. Save → Claude lists 18 tools
-
-### Connecting via curl / programmatic clients
-
-Use the `Authorization: Bearer <token>` header:
-
-```bash
-curl -X POST https://yougile-mcp.<...>.workers.dev/mcp \
-  -H "Authorization: Bearer $MCP_AUTH_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+Connect from **claude.ai → Settings → Connectors → Add custom connector:**
+```
+https://yougile-mcp.<subdomain>.workers.dev/<MCP_AUTH_TOKEN>/mcp
 ```
 
-## Getting a YouGile API key
+---
 
-```bash
-# 1. Get companyId
-curl -X POST https://ru.yougile.com/api-v2/auth/companies \
-  -H "Content-Type: application/json" \
-  -d '{"login":"YOUR_EMAIL","password":"YOUR_PASSWORD"}'
+## API notes & known quirks
 
-# 2. Get API key (paste companyId from step 1)
-curl -X POST https://ru.yougile.com/api-v2/auth/keys \
-  -H "Content-Type: application/json" \
-  -d '{"login":"YOUR_EMAIL","password":"YOUR_PASSWORD","companyId":"..."}'
-```
+| Issue | Details |
+|---|---|
+| `create_project` requires `adminUserId` | Without it the project is created but invisible — YouGile API quirk |
+| `create_column` — use `POST /columns` | `POST /boards/{id}/columns` returns 404; pass `boardId` in request body |
+| `my_tasks` — uses `assignedTo` filter | `/users/{id}/tasks` does not exist in API v2 |
+| User name field | API returns `realName`, not `firstName`/`lastName` |
+| Rate limit | 45 req/min per company — built-in sliding window handles this |
+| `list_tasks` without `columnId` | Returns limited/empty results — filter by `columnId` or `assignedTo` |
 
-## Project layout
+---
+
+## Project structure
 
 ```
 src/
-  index.ts           stdio entry (local mode)
-  worker.ts          Cloudflare Workers entry (remote mode)
-  server.ts          MCP server factory shared by both entries
+  index.ts              stdio entry point (local mode)
+  worker.ts             Cloudflare Workers entry (remote mode)
+  server.ts             MCP server factory (shared)
   api/
-    client.ts        YouGile HTTP client + rate limiter
-    types.ts         TypeScript interfaces for YouGile entities
+    client.ts           YouGile HTTP client + rate limiter
+    types.ts            TypeScript interfaces
   tools/
-    index.ts         registers all tools on the server
-    projects.ts boards.ts columns.ts users.ts
-    tasks.ts         CRUD + move + complete
-    stickers.ts      list + set
-    chats.ts         add + get comments
-    analytics.ts     board_summary, my_tasks, overdue_tasks
+    index.ts            registers all 38 tools
+    projects.ts         list + create + update + delete
+    boards.ts           list + create + update + delete
+    columns.ts          list + create + update + delete
+    tasks.ts            CRUD + move + complete
+    stickers.ts         full sticker/state management
+    chats.ts            comments
+    analytics.ts        summaries, overdue, project traversal
+    users.ts            list users
   utils/
-    rate-limiter.ts  sliding window 45 req/min
+    rate-limiter.ts     sliding window 45 req/min
 ```
 
-## Documentation for AI agents
+---
 
-See [AGENTS.md](./AGENTS.md) for the full tool reference and recommended
-workflows when an agent uses this MCP server.
+## References
+
+- [ra53n/yougile-mcp](https://github.com/ra53n/yougile-mcp) — original server this project extends
+- [YouGile API v2](https://ru.yougile.com/api-v2/) — official REST API reference
+- [Model Context Protocol SDK](https://github.com/modelcontextprotocol/sdk) — MCP TypeScript SDK
+- [MCP specification](https://modelcontextprotocol.io) — protocol docs
+- [Zod](https://github.com/colinhacks/zod) — runtime schema validation
+- [Cloudflare Workers](https://developers.cloudflare.com/workers/) — remote deployment
+
+---
+
+## AI agent guide
+
+See [AGENTS.md](./AGENTS.md) for recommended workflows and call chains.
+
+---
 
 ## License
 

@@ -54,9 +54,10 @@ export interface YGTask {
 export interface YGUser {
   id: string;
   email: string;
-  firstName: string;
-  lastName: string;
+  realName?: string;
   isAdmin?: boolean;
+  status?: string;
+  lastActivity?: number;
 }
 
 export interface YGStickerState {

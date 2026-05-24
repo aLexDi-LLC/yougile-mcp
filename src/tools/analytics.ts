@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { YouGileClient } from "../api/client.js";
-import type { YGColumn, YGTask, PaginatedResponse } from "../api/types.js";
+import type { YGBoard, YGColumn, YGProject, YGTask, PaginatedResponse } from "../api/types.js";
 
 export function registerAnalyticsTools(
   server: McpServer,
@@ -96,9 +96,8 @@ export function registerAnalyticsTools(
         };
       }
 
-      const tasks = await client.getPaginated<YGTask>(
-        `/users/${uid}/tasks`
-      );
+      // /users/{id}/tasks returns 404 in YouGile API v2 — use list_tasks with assignedTo filter instead
+      const tasks = await client.getPaginated<YGTask>("/tasks", { assignedTo: uid });
 
       const now = Date.now();
       const overdue: YGTask[] = [];
@@ -210,6 +209,114 @@ export function registerAnalyticsTools(
               null,
               2
             ),
+          },
+        ],
+      };
+    }
+  );
+
+  server.tool(
+    "list_tasks_by_project",
+    "List all tasks in a project by traversing boards → columns → tasks. Makes multiple API calls. Use includeCompleted=false to skip done tasks.",
+    {
+      projectId: z.string().describe("Project ID"),
+      includeCompleted: z.boolean().optional().describe("Include completed tasks (default true)"),
+    },
+    async ({ projectId, includeCompleted = true }) => {
+      const boards = await client.getPaginated<YGBoard>("/boards", { projectId });
+
+      const result: Array<{
+        board: string;
+        column: string;
+        id: string;
+        title: string;
+        completed: boolean;
+        assigned: string[];
+        deadline: string | null;
+      }> = [];
+
+      for (const board of boards) {
+        const columns = await client.getPaginated<YGColumn>("/columns", { boardId: board.id });
+        for (const col of columns) {
+          const tasks = await client.getPaginated<YGTask>("/tasks", { columnId: col.id });
+          for (const t of tasks) {
+            if (!includeCompleted && t.completed) continue;
+            result.push({
+              board: board.title,
+              column: col.title,
+              id: t.id,
+              title: t.title,
+              completed: t.completed ?? false,
+              assigned: t.assigned ?? [],
+              deadline: t.deadline?.timestamp
+                ? new Date(t.deadline.timestamp).toISOString()
+                : null,
+            });
+          }
+        }
+      }
+
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify({ projectId, total: result.length, tasks: result }, null, 2),
+          },
+        ],
+      };
+    }
+  );
+
+  server.tool(
+    "company_overdue_tasks",
+    "Find ALL overdue tasks across the entire company (all projects → boards → columns). Makes many API calls — use sparingly.",
+    {},
+    async () => {
+      const projects = await client.getPaginated<YGProject>("/projects");
+      const now = Date.now();
+
+      const overdue: Array<{
+        project: string;
+        board: string;
+        column: string;
+        id: string;
+        title: string;
+        deadline: string;
+        daysOverdue: number;
+        assigned: string[];
+      }> = [];
+
+      for (const project of projects) {
+        const boards = await client.getPaginated<YGBoard>("/boards", { projectId: project.id });
+        for (const board of boards) {
+          const columns = await client.getPaginated<YGColumn>("/columns", { boardId: board.id });
+          for (const col of columns) {
+            const tasks = await client.getPaginated<YGTask>("/tasks", { columnId: col.id });
+            for (const t of tasks) {
+              if (t.deadline?.timestamp && t.deadline.timestamp < now && !t.completed) {
+                overdue.push({
+                  project: project.title,
+                  board: board.title,
+                  column: col.title,
+                  id: t.id,
+                  title: t.title,
+                  deadline: new Date(t.deadline.timestamp).toISOString(),
+                  daysOverdue: Math.floor((now - t.deadline.timestamp) / 86_400_000),
+                  assigned: t.assigned ?? [],
+                });
+              }
+            }
+          }
+        }
+      }
+
+      overdue.sort((a, b) => b.daysOverdue - a.daysOverdue);
+
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify({ totalOverdue: overdue.length, tasks: overdue }, null, 2),
           },
         ],
       };

@@ -16,7 +16,9 @@ export function registerUserTools(
             users.map((u) => ({
               id: u.id,
               email: u.email,
-              name: `${u.firstName} ${u.lastName}`.trim(),
+              name: u.realName || u.email,
+              isAdmin: u.isAdmin ?? false,
+              status: u.status,
             })),
             null,
             2

@@ -2,145 +2,295 @@
 
 [English](./README.md) | **Русский**
 
-Кастомный MCP-сервер (Model Context Protocol) для российского сервиса управления
-задачами [YouGile](https://yougile.com). Позволяет Claude и любому другому
-AI-агенту, поддерживающему MCP, читать и изменять твои доски: создавать задачи,
-двигать их между колонками, ставить теги (стикеры), писать комментарии и
-получать аналитику.
+Расширенный MCP-сервер (Model Context Protocol) для российской системы управления задачами [YouGile](https://yougile.com). Позволяет Claude и любому AI-агенту с поддержкой MCP читать и изменять рабочее пространство YouGile на естественном языке: создавать задачи, управлять досками, ставить теги, писать комментарии, получать аналитику.
 
-Работает в двух режимах:
-- **Локально (stdio)** — для Claude Desktop / Claude Code на твоём компьютере
-- **Удалённо (Cloudflare Workers)** — один развёрнутый инстанс, доступный со
-  всех твоих устройств; используется в claude.ai через коннекторы и в
-  routines (автономные агенты по расписанию)
+> **Основан на** [ra53n/yougile-mcp](https://github.com/ra53n/yougile-mcp) — добавлено 10 новых инструментов, исправлены баги, добавлена поддержка Linux.
 
-## Возможности
+---
 
-28 инструментов в 6 категориях:
+## Что добавлено по сравнению с оригиналом
 
-- **Навигация** — `list_projects`, `list_boards`, `list_columns`, `list_users`
-- **CRUD задач** — `list_tasks`, `get_task`, `create_task`, `update_task`,
-  `delete_task`, `move_task`, `complete_task`
-- **Теги (стикеры)** — `list_stickers`, `get_sticker`, `list_sprint_stickers`,
-  `create_sticker`, `update_sticker`, `delete_sticker`,
-  `add_sticker_state`, `update_sticker_state`, `delete_sticker_state`,
-  `set_task_stickers`, `add_task_sticker`, `remove_task_sticker`
-- **Комментарии** — `add_task_comment`, `get_task_comments`
-- **Аналитика** — `board_summary`, `my_tasks`, `overdue_tasks`
+| Категория | Добавлено |
+|---|---|
+| Проекты | `create_project`, `update_project`, `delete_project` |
+| Доски | `create_board`, `update_board`, `delete_board` |
+| Колонки | `create_column`, `update_column`, `delete_column` |
+| Аналитика | `list_tasks_by_project`, `company_overdue_tasks` |
+| Исправления | `my_tasks` починен (был 404), имена пользователей исправлены (поле `realName`) |
 
-Встроенный rate limiter: 45 запросов/мин (запас под лимит YouGile в 50/мин).
+**Итого: 38 инструментов** (в оригинале было 28).
 
-## Архитектура
+---
 
-```
-┌──────────────┐                  ┌────────────────────┐                ┌──────────────┐
-│  Claude /    │   протокол MCP   │   этот сервер      │  YouGile API   │   YouGile    │
-│  агент       │ ───────────────► │  (stdio или HTTP)  │ ─────────────► │   облако     │
-└──────────────┘                  └────────────────────┘                └──────────────┘
-```
+## Инструменты
 
-Сервер — это типизированная обёртка над REST API YouGile v2. Каждый MCP-инструмент
-соответствует одному или нескольким вызовам API. Аутентификация в YouGile
-выполняется по Bearer-ключу, который хранится в переменной `YOUGILE_API_KEY`.
+### Навигация
+| Инструмент | Описание |
+|---|---|
+| `list_projects` | Список всех проектов компании |
+| `list_boards` | Список досок в проекте |
+| `list_columns` | Список колонок на доске |
+| `list_users` | Список пользователей (realName, email, isAdmin, status) |
 
-## Быстрый старт — локально (stdio)
+### Задачи
+| Инструмент | Описание |
+|---|---|
+| `list_tasks` | Список задач с фильтрами: columnId, assignedTo, поиск по названию |
+| `get_task` | Получить задачу по ID или коду (например PRJ-123) |
+| `create_task` | Создать задачу: название, колонка, описание, исполнители, дедлайн, стикеры |
+| `update_task` | Обновить любые поля задачи |
+| `delete_task` | Мягкое удаление задачи |
+| `move_task` | Переместить задачу в другую колонку |
+| `complete_task` | Отметить задачу выполненной |
+
+### Управление структурой
+| Инструмент | Описание |
+|---|---|
+| `create_project` | Создать проект (требует adminUserId — см. особенности API) |
+| `update_project` | Переименовать проект |
+| `delete_project` | Архивировать проект |
+| `create_board` | Создать доску в проекте |
+| `update_board` | Переименовать доску |
+| `delete_board` | Архивировать доску |
+| `create_column` | Создать колонку на доске |
+| `update_column` | Переименовать или изменить цвет колонки |
+| `delete_column` | Архивировать колонку |
+
+### Теги (стикеры)
+| Инструмент | Описание |
+|---|---|
+| `list_stickers` | Список стикеров на доске |
+| `get_sticker` | Детали стикера и его состояния |
+| `list_sprint_stickers` | Список спринт-стикеров (с временными рамками) |
+| `create_sticker` | Создать новый тип стикера |
+| `update_sticker` | Переименовать стикер |
+| `delete_sticker` | Удалить тип стикера |
+| `add_sticker_state` | Добавить состояние к стикеру |
+| `update_sticker_state` | Переименовать состояние стикера |
+| `delete_sticker_state` | Удалить состояние стикера |
+| `set_task_stickers` | Установить все стикеры задачи сразу |
+| `add_task_sticker` | Добавить один стикер к задаче |
+| `remove_task_sticker` | Убрать стикер с задачи |
+
+### Комментарии
+| Инструмент | Описание |
+|---|---|
+| `add_task_comment` | Написать комментарий в чате задачи |
+| `get_task_comments` | Получить историю комментариев задачи |
+
+### Аналитика
+| Инструмент | Описание |
+|---|---|
+| `board_summary` | Сводка по доске: счётчики, процент выполнения, просроченные, без исполнителя |
+| `my_tasks` | Задачи пользователя по статусам (просроченные / в работе / выполненные) |
+| `overdue_tasks` | Просроченные задачи на конкретной доске |
+| `list_tasks_by_project` | Все задачи проекта (обходит доски → колонки → задачи) |
+| `company_overdue_tasks` | Все просроченные задачи по всей компании |
+
+---
+
+## Требования
+
+- **Node.js** ≥ 18 (тестировалось на v20)
+- **npm** ≥ 9
+- **API-ключ YouGile** (см. ниже)
+
+---
+
+## Установка
+
+### Linux / macOS
 
 ```bash
+# 1. Установить Node.js через nvm (не требует sudo)
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+source ~/.bashrc        # или: source ~/.zshrc
+nvm install 20
+
+# 2. Клонировать и собрать
+git clone https://github.com/YOUR_USERNAME/yougile-mcp
+cd yougile-mcp
 npm install
 npm run build
+
+# 3. Настроить
+cp .env.example .env
+nano .env               # вставить YOUGILE_API_KEY
 ```
 
-Добавь в конфиг MCP в Claude Desktop / Claude Code:
+### Windows
+
+```powershell
+# Установить Node.js (если не установлен)
+winget install OpenJS.NodeJS.LTS
+
+# Клонировать и собрать
+git clone https://github.com/YOUR_USERNAME/yougile-mcp
+cd yougile-mcp
+npm install
+npm run build
+
+# Настроить
+copy .env.example .env
+notepad .env            # вставить YOUGILE_API_KEY
+```
+
+---
+
+## Получение API-ключа YouGile
+
+**Вариант A — через приложение (быстрее):**
+1. Открыть YouGile в браузере
+2. Нажать `Ctrl + ~`
+3. Скопировать API-ключ
+
+**Вариант B — через API:**
+```bash
+# Шаг 1: получить companyId
+curl -X POST https://ru.yougile.com/api-v2/auth/companies \
+  -H "Content-Type: application/json" \
+  -d '{"login":"ваш@email.com","password":"пароль"}'
+
+# Шаг 2: получить API-ключ (использовать companyId из шага 1)
+curl -X POST https://ru.yougile.com/api-v2/auth/keys/get \
+  -H "Content-Type: application/json" \
+  -d '{"login":"ваш@email.com","password":"пароль","companyId":"COMPANY_ID"}'
+```
+
+---
+
+## Подключение к Claude Code (локально / stdio)
+
+Добавить в `.mcp.json` проекта или `~/.claude/settings.json`:
 
 ```json
 {
   "mcpServers": {
     "yougile": {
       "command": "node",
-      "args": ["/абсолютный/путь/к/dist/index.js"],
+      "args": ["/абсолютный/путь/к/yougile-mcp/dist/index.js"],
       "env": {
-        "YOUGILE_API_KEY": "твой-ключ-yougile",
-        "YOUGILE_USER_ID": "опционально-твой-userid-для-my_tasks"
+        "YOUGILE_API_KEY": "ваш-api-ключ",
+        "YOUGILE_USER_ID": "ваш-user-id-опционально"
       }
     }
   }
 }
 ```
 
-## Быстрый старт — удалённо (Cloudflare Workers)
+> **Linux с nvm:** укажите полный путь к node:
+> `"/home/username/.nvm/versions/node/v20.20.2/bin/node"`
+
+**Несколько организаций YouGile** — добавьте по одной записи на каждую:
+```json
+{
+  "mcpServers": {
+    "yougile-org1": { "command": "node", "args": ["..."], "env": { "YOUGILE_API_KEY": "ключ1" } },
+    "yougile-org2": { "command": "node", "args": ["..."], "env": { "YOUGILE_API_KEY": "ключ2" } }
+  }
+}
+```
+
+Проверка: запустить `/mcp` в Claude Code — должно показать `yougile: connected`.
+
+---
+
+## Подключение к Claude Desktop
+
+Редактировать конфиг:
+- **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "yougile": {
+      "command": "node",
+      "args": ["/абсолютный/путь/к/yougile-mcp/dist/index.js"],
+      "env": {
+        "YOUGILE_API_KEY": "ваш-api-ключ"
+      }
+    }
+  }
+}
+```
+
+---
+
+## Удалённый деплой (Cloudflare Workers)
 
 ```bash
 npm install
 npx wrangler login
-npx wrangler secret put YOUGILE_API_KEY     # вставь ключ YouGile
-npx wrangler secret put MCP_AUTH_TOKEN      # вставь случайную строку (openssl rand -hex 32)
+npx wrangler secret put YOUGILE_API_KEY      # вставить YouGile-ключ
+npx wrangler secret put MCP_AUTH_TOKEN       # openssl rand -hex 32
 npm run deploy
 ```
 
-Получишь URL вида `https://yougile-mcp.<твой-сабдомен>.workers.dev`.
+Проверка: `curl https://yougile-mcp.<subdomain>.workers.dev/health`
 
-Проверка: `curl https://yougile-mcp.<...>.workers.dev/health` → `{"status":"ok"}`
-
-### Подключение из claude.ai
-
-Веб-интерфейс claude.ai не поддерживает кастомные HTTP-заголовки в коннекторах,
-поэтому токен авторизации передаётся в URL:
-
-1. https://claude.ai/settings/connectors → **Add custom connector**
-2. URL: `https://yougile-mcp.<...>.workers.dev/<MCP_AUTH_TOKEN>/mcp`
-3. Поля OAuth — оставь пустыми
-4. Save → Claude подтянет 18 инструментов
-
-### Подключение через curl / программные клиенты
-
-Используй заголовок `Authorization: Bearer <token>`:
-
-```bash
-curl -X POST https://yougile-mcp.<...>.workers.dev/mcp \
-  -H "Authorization: Bearer $MCP_AUTH_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+Подключение через **claude.ai → Настройки → Коннекторы → Добавить:**
+```
+https://yougile-mcp.<subdomain>.workers.dev/<MCP_AUTH_TOKEN>/mcp
 ```
 
-## Получение ключа API в YouGile
+---
 
-```bash
-# 1. Узнай companyId
-curl -X POST https://ru.yougile.com/api-v2/auth/companies \
-  -H "Content-Type: application/json" \
-  -d '{"login":"ТВОЯ_ПОЧТА","password":"ПАРОЛЬ"}'
+## Особенности API YouGile
 
-# 2. Получи API-ключ (вставь companyId из шага 1)
-curl -X POST https://ru.yougile.com/api-v2/auth/keys \
-  -H "Content-Type: application/json" \
-  -d '{"login":"ТВОЯ_ПОЧТА","password":"ПАРОЛЬ","companyId":"..."}'
-```
+| Проблема | Подробности |
+|---|---|
+| `create_project` требует `adminUserId` | Без него проект создаётся, но не отображается в списке |
+| `create_column` — использовать `POST /columns` | `POST /boards/{id}/columns` возвращает 404; `boardId` передаётся в теле запроса |
+| `my_tasks` — использует фильтр `assignedTo` | Эндпоинт `/users/{id}/tasks` не существует в API v2 |
+| Поле имени пользователя | API возвращает `realName`, а не `firstName`/`lastName` |
+| Лимит запросов | 45 запросов/мин на компанию — встроенный ограничитель обрабатывает очередь |
+| `list_tasks` без `columnId` | Возвращает ограниченные результаты — всегда фильтровать по `columnId` или `assignedTo` |
+
+---
 
 ## Структура проекта
 
 ```
 src/
-  index.ts           вход stdio (локальный режим)
-  worker.ts          вход Cloudflare Workers (удалённый режим)
-  server.ts          фабрика MCP-сервера, общая для обоих входов
+  index.ts              stdio точка входа (локальный режим)
+  worker.ts             Cloudflare Workers точка входа (удалённый режим)
+  server.ts             фабрика MCP-сервера (общая)
   api/
-    client.ts        HTTP-клиент YouGile + rate limiter
-    types.ts         TypeScript-интерфейсы сущностей YouGile
+    client.ts           HTTP-клиент YouGile + ограничитель запросов
+    types.ts            TypeScript-интерфейсы
   tools/
-    index.ts         регистрация всех инструментов
-    projects.ts boards.ts columns.ts users.ts
-    tasks.ts         CRUD + move + complete
-    stickers.ts      list + set
-    chats.ts         add + get комментариев
-    analytics.ts     board_summary, my_tasks, overdue_tasks
+    index.ts            регистрирует все 38 инструментов
+    projects.ts         список + создание + обновление + удаление
+    boards.ts           список + создание + обновление + удаление
+    columns.ts          список + создание + обновление + удаление
+    tasks.ts            CRUD + перемещение + завершение
+    stickers.ts         управление стикерами и состояниями
+    chats.ts            комментарии
+    analytics.ts        сводки, просроченные, обход проекта
+    users.ts            список пользователей
   utils/
-    rate-limiter.ts  скользящее окно 45 запросов/мин
+    rate-limiter.ts     скользящее окно 45 запросов/мин
 ```
 
-## Документация для AI-агентов
+---
 
-См. [AGENTS.ru.md](./AGENTS.ru.md) — полный справочник инструментов и
-рекомендуемые сценарии работы агента с этим MCP-сервером.
+## Ссылки
+
+- [ra53n/yougile-mcp](https://github.com/ra53n/yougile-mcp) — оригинальный сервер, на основе которого сделан этот
+- [YouGile API v2](https://ru.yougile.com/api-v2/) — официальная документация REST API
+- [Model Context Protocol SDK](https://github.com/modelcontextprotocol/sdk) — TypeScript SDK для MCP
+- [MCP спецификация](https://modelcontextprotocol.io) — документация протокола
+- [Zod](https://github.com/colinhacks/zod) — валидация схем параметров
+- [Cloudflare Workers](https://developers.cloudflare.com/workers/) — платформа для удалённого деплоя
+
+---
+
+## Руководство для AI-агентов
+
+Смотри [AGENTS.ru.md](./AGENTS.ru.md) — рекомендованные сценарии работы и цепочки вызовов.
+
+---
 
 ## Лицензия
 
