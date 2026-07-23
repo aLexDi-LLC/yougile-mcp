@@ -1,5 +1,7 @@
+import { readFile } from "node:fs/promises";
+import { basename } from "node:path";
 import { RateLimiter } from "../utils/rate-limiter.js";
-import type { PaginatedResponse } from "./types.js";
+import type { PaginatedResponse, YGFileUpload } from "./types.js";
 
 export class YouGileClient {
   private baseUrl: string;
@@ -59,6 +61,34 @@ export class YouGileClient {
 
   async put<T>(path: string, body: unknown): Promise<T> {
     return this.request<T>("PUT", path, body);
+  }
+
+  // YouGile has no separate "attachment" object — files are uploaded to
+  // storage and you get back a URL, which you then embed yourself as a link
+  // or <img> in a task description (HTML) or a chat message (textHtml).
+  async uploadFile(filePath: string): Promise<YGFileUpload> {
+    await this.rateLimiter.acquire();
+
+    const data = await readFile(filePath);
+    const form = new FormData();
+    form.append("file", new Blob([data]), basename(filePath));
+
+    const res = await fetch(`${this.baseUrl}/upload-file`, {
+      method: "POST",
+      // No Content-Type header: fetch sets multipart/form-data with the
+      // correct boundary automatically when the body is a FormData instance.
+      headers: { Authorization: `Bearer ${this.apiKey}` },
+      body: form,
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(
+        `YouGile API POST /upload-file failed: ${res.status} ${res.statusText}. ${text}`
+      );
+    }
+
+    return (await res.json()) as YGFileUpload;
   }
 
   async getPaginated<T>(

@@ -11,7 +11,8 @@ export function createServer(apiKey: string): McpServer {
         "YouGile task management server. Navigate: list_projects → list_boards → list_columns → list_tasks. " +
         "Use create_task, update_task, move_task, complete_task for task management. " +
         "Use board_summary, my_tasks, overdue_tasks for analytics. " +
-        "Use list_stickers + set_task_stickers for tagging.",
+        "Use list_stickers + set_task_stickers for tagging. " +
+        "Use attach_task_file to upload a local file and link it in a task's chat.",
     }
   );
   registerAllTools(server, client);

@@ -16,9 +16,10 @@ Extended Model Context Protocol (MCP) server for [YouGile](https://yougile.com) 
 | Boards | `create_board`, `update_board`, `delete_board` |
 | Columns | `create_column`, `update_column`, `delete_column` |
 | Analytics | `list_tasks_by_project`, `company_overdue_tasks` |
+| Files | `upload_file`, `attach_task_file` |
 | Bug fixes | `my_tasks` fixed (was 404), `list_users` names fixed (`realName` field) |
 
-**Total: 39 tools** (original had 28).
+**Total: 41 tools** (original had 28).
 
 ---
 
@@ -77,6 +78,12 @@ Extended Model Context Protocol (MCP) server for [YouGile](https://yougile.com) 
 |---|---|
 | `add_task_comment` | Post a comment in a task's chat |
 | `get_task_comments` | Fetch task comment history |
+
+### Files
+| Tool | Description |
+|---|---|
+| `upload_file` | Upload a local file to YouGile's storage, get back a URL |
+| `attach_task_file` | Upload a local file and post it as a link in a task's chat (YouGile has no native attachment object — this is the practical equivalent) |
 
 ### Analytics
 | Tool | Description |
@@ -262,6 +269,8 @@ https://yougile-mcp.<subdomain>.workers.dev/<MCP_AUTH_TOKEN>/mcp
 | User name field | API returns `realName`, not `firstName`/`lastName` |
 | Rate limit | 45 req/min per company — built-in sliding window handles this |
 | `list_tasks` without `columnId` | Returns limited/empty results — filter by `columnId` or `assignedTo` |
+| No attachment object | `POST /upload-file` only returns a URL — attaching means uploading, then embedding that URL yourself as a link/`<img>` in a description or chat message |
+| `upload_file` / `attach_task_file` are stdio-only | They read a local file by path — not usable from the Cloudflare Workers (remote) deployment, which has no filesystem |
 
 ---
 
@@ -276,13 +285,14 @@ src/
     client.ts           YouGile HTTP client + rate limiter
     types.ts            TypeScript interfaces
   tools/
-    index.ts            registers all 39 tools
+    index.ts            registers all 41 tools
     projects.ts         list + create + update + delete
     boards.ts           list + create + update + delete
     columns.ts          list + create + update + delete
     tasks.ts            CRUD + move + complete
     stickers.ts         full sticker/state management
     chats.ts            comments
+    files.ts            upload_file, attach_task_file
     analytics.ts        summaries, overdue, project traversal
     users.ts            list users
   utils/

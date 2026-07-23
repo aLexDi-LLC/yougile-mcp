@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.2.0] — 2026-07-23
+
+### Added
+- `upload_file` — upload a local file to YouGile's file storage (`POST /upload-file`,
+  multipart/form-data), returns `{ result, url, fullUrl }`
+- `attach_task_file` — uploads a local file and posts it as a link in the task's
+  chat in one call. YouGile has no native "attachment" object on tasks or chat
+  messages — the only file primitive is the upload endpoint, which just returns
+  a URL that must be embedded manually as a link/`<img>` — this tool wraps that
+  two-step pattern.
+
+### Notes
+- Both new tools read a local file by path, so they only work in stdio (local)
+  mode — not from the Cloudflare Workers remote deployment, which has no
+  filesystem.
+
 ## [1.1.0] — 2026-05-24
 
 ### Added
