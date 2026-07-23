@@ -271,6 +271,7 @@ https://yougile-mcp.<subdomain>.workers.dev/<MCP_AUTH_TOKEN>/mcp
 | `list_tasks` without `columnId` | Returns limited/empty results — filter by `columnId` or `assignedTo` |
 | No attachment object | `POST /upload-file` only returns a URL — attaching means uploading, then embedding that URL yourself as a link/`<img>` in a description or chat message |
 | `upload_file` / `attach_task_file` are stdio-only | They read a local file by path — not usable from the Cloudflare Workers (remote) deployment, which has no filesystem |
+| Uploaded files are public | The returned URL needs no authentication to fetch — never upload secrets/credentials |
 
 ---
 

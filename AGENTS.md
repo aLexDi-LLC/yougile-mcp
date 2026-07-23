@@ -117,7 +117,7 @@ Prefer `add_task_sticker` / `remove_task_sticker` for routine tagging. `set_task
 | `upload_file` | `filePath` | Uploads a local file, returns `{ result, url, fullUrl }`. YouGile has no attachment object — `fullUrl` is a plain link you embed yourself |
 | `attach_task_file` | `taskId`, `filePath` | Uploads and posts the link as a chat message in one call — the practical way to "attach" a file to a task |
 
-⚠️ Both read a local file by path — stdio (local) mode only, not available from the Cloudflare Workers remote deployment.
+⚠️ Both read a local file by path — stdio (local) mode only, not available from the Cloudflare Workers remote deployment. The returned URL is public, no auth required to fetch it — never upload secrets/credentials.
 
 ### Analytics
 

@@ -1,3 +1,4 @@
+import { basename } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { YouGileClient } from "../api/client.js";
@@ -26,7 +27,8 @@ export function registerFileTools(
     "Upload a local file to YouGile's file storage and get back its URL. " +
       "YouGile has no separate 'attachment' object — use the returned fullUrl " +
       "as a link (or <img src>) in a task description or chat message. " +
-      "For the common case of attaching a file to a task, use attach_task_file instead.",
+      "For the common case of attaching a file to a task, use attach_task_file instead. " +
+      "WARNING: the returned URL is publicly reachable with no authentication — never upload secrets/credentials.",
     {
       filePath: z.string().describe("Absolute path to the local file to upload"),
     },
@@ -44,7 +46,8 @@ export function registerFileTools(
     "attach_task_file",
     "Upload a local file and post it as a link in the task's chat — the " +
       "practical equivalent of 'attaching' a file, since YouGile has no " +
-      "native attachment object. The chat ID equals the task ID.",
+      "native attachment object. The chat ID equals the task ID. " +
+      "WARNING: the uploaded file becomes publicly reachable with no authentication — never attach secrets/credentials.",
     {
       taskId: z.string().describe("Task ID (used as chat ID)"),
       filePath: z.string().describe("Absolute path to the local file to upload"),
@@ -55,14 +58,17 @@ export function registerFileTools(
     },
     async ({ taskId, filePath, message }) => {
       const uploaded = await client.uploadFile(filePath);
-      const fileName = filePath.split("/").pop() || "file";
+      const fileName = basename(filePath);
 
       const textParts = [message, `${fileName}: ${uploaded.fullUrl}`].filter(
         (part): part is string => Boolean(part)
       );
       const htmlParts = [
         message ? `<p>${escapeHtml(message)}</p>` : "",
-        `<p><a href="${uploaded.fullUrl}" target="_blank" rel="noopener">${escapeHtml(
+        // fullUrl comes back from YouGile and echoes the uploaded filename
+        // verbatim, which the caller controls — escape it like any other
+        // attribute value rather than trusting it to already be safe.
+        `<p><a href="${escapeHtml(uploaded.fullUrl)}" target="_blank" rel="noopener">${escapeHtml(
           fileName
         )}</a></p>`,
       ].filter(Boolean);
