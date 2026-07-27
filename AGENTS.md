@@ -38,7 +38,7 @@ Company
 
 ---
 
-## 3. Tool reference — all 39 tools
+## 3. Tool reference — all 41 tools
 
 ### Navigation
 
@@ -109,6 +109,15 @@ Prefer `add_task_sticker` / `remove_task_sticker` for routine tagging. `set_task
 |---|---|---|
 | `add_task_comment` | `taskId`, `text` | Optional `label`. Supports plain text or HTML |
 | `get_task_comments` | `taskId` | Full chat history, auto-paginated |
+
+### Files
+
+| Tool | Required | Notes |
+|---|---|---|
+| `upload_file` | `filePath` | Uploads a local file, returns `{ result, url, fullUrl }`. YouGile has no attachment object — `fullUrl` is a plain link you embed yourself |
+| `attach_task_file` | `taskId`, `filePath` | Uploads and posts the link as a chat message in one call — the practical way to "attach" a file to a task |
+
+⚠️ Both read a local file by path — stdio (local) mode only, not available from the Cloudflare Workers remote deployment. The returned URL is public, no auth required to fetch it — never upload secrets/credentials.
 
 ### Analytics
 
@@ -293,7 +302,7 @@ async def main():
         env={"YOUGILE_API_KEY": "your-api-key"}
     )
 
-    tools = await mcp_server_tools(server_params)  # auto-discovers all 39 tools
+    tools = await mcp_server_tools(server_params)  # auto-discovers all 41 tools
     print(f"Loaded {len(tools)} tools: {[t.name for t in tools]}")
 
     agent = AssistantAgent(

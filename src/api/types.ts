@@ -97,3 +97,9 @@ export interface YGChatMessage {
   timestamp?: number;
   label?: string;
 }
+
+export interface YGFileUpload {
+  result: string;
+  url: string;
+  fullUrl: string;
+}
